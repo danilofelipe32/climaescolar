@@ -12,7 +12,7 @@ import {
 import { 
     Shield, School, MessageSquare, AlertTriangle, Upload, FileText, Heart, Activity, 
     CheckCircle, Sparkles, BrainCircuit, FileDown, Loader2, Calculator, Settings,
-    Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet, BarChart3
+    Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet, BarChart3, Eye, X
 } from 'lucide-react';
 
 import { Sidebar, KpiCard, SuggestionCard, DarkTooltip, MarkdownRenderers } from './components/Components';
@@ -513,6 +513,7 @@ const App: React.FC = () => {
     );
 
     const ReportsView = () => {
+        const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
         const uniqueRoles = ['Todos', ...Array.from(new Set(suggestions.map(s => s.role))).sort()];
         const filteredReportSuggestions = suggestions.filter(s => 
             (reportRoleFilter === 'Todos' || s.role === reportRoleFilter) &&
@@ -576,7 +577,7 @@ const App: React.FC = () => {
                     <div className="p-6 rounded-2xl bg-slate-800/50 border border-slate-700 flex items-center justify-between"><div><p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Neutros</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.neutral}%</h4><p className="text-slate-500 text-xs mt-1">{sentimentStats.counts.Neutro} comentários</p></div><div className="p-3 rounded-xl bg-slate-700/50 text-slate-400"><Meh size={24}/></div></div>
                     <div className="p-6 rounded-2xl bg-red-900/20 border border-red-800 flex items-center justify-between"><div><p className="text-red-400 text-xs font-bold uppercase tracking-widest">Negativos</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.negative}%</h4><p className="text-slate-400 text-xs mt-1">{sentimentStats.counts.Negativo} comentários</p></div><div className="p-3 rounded-xl bg-red-500/20 text-red-400"><Frown size={24}/></div></div>
                 </div>
-                <div className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-xl">
+                <div className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-xl relative">
                     <div className="flex flex-col xl:flex-row justify-between items-center mb-8 gap-4">
                         <div><h2 className="text-3xl font-bold text-white flex items-center gap-3"><FileText size={32} className="text-cyan-400" /> Relatório Detalhado</h2></div>
                         <div className="flex flex-wrap items-center gap-3 justify-end">
@@ -688,7 +689,14 @@ const App: React.FC = () => {
                     <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/50">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm text-slate-400">
-                                <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider"><tr><th className="px-6 py-5 border-b border-slate-800">Role</th><th className="px-6 py-5 border-b border-slate-800">Sentimento</th><th className="px-6 py-5 border-b border-slate-800">Feedback</th></tr></thead>
+                                <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider">
+                                    <tr>
+                                        <th className="px-6 py-5 border-b border-slate-800">Role</th>
+                                        <th className="px-6 py-5 border-b border-slate-800">Sentimento</th>
+                                        <th className="px-6 py-5 border-b border-slate-800">Feedback</th>
+                                        <th className="px-6 py-5 border-b border-slate-800 text-right">Ações</th>
+                                    </tr>
+                                </thead>
                                 <tbody className="divide-y divide-slate-800">
                                     {filteredReportSuggestions.length > 0 ? (filteredReportSuggestions.map((sug) => (
                                         <tr 
@@ -701,13 +709,63 @@ const App: React.FC = () => {
                                         >
                                             <td className="px-6 py-5 w-48 align-top"><span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border ${sug.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : sug.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{sug.role}</span></td>
                                             <td className="px-6 py-5 w-32"><span className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold border ${sug.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : sug.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{sug.sentiment}</span></td>
-                                            <td className="px-6 py-5 text-slate-300 leading-relaxed group-hover:text-white transition-colors">{sug.text}</td>
+                                            <td className="px-6 py-5 text-slate-300 leading-relaxed group-hover:text-white transition-colors line-clamp-2 max-w-md">{sug.text}</td>
+                                            <td className="px-6 py-5 text-right align-top">
+                                                <button
+                                                    onClick={() => setSelectedSuggestion(sug)}
+                                                    className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                                                    title="Ver Detalhes"
+                                                >
+                                                    <Eye size={16} />
+                                                </button>
+                                            </td>
                                         </tr>
-                                    ))) : (<tr><td colSpan={3} className="px-6 py-12 text-center text-slate-600 italic">Nenhum dado disponível.</td></tr>)}
+                                    ))) : (<tr><td colSpan={4} className="px-6 py-12 text-center text-slate-600 italic">Nenhum dado disponível.</td></tr>)}
                                 </tbody>
                             </table>
                         </div>
                     </div>
+
+                    {/* DETAILS MODAL */}
+                    {selectedSuggestion && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                            <div className="bg-[#1e293b] border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 relative flex flex-col max-h-[90vh]">
+                                <button
+                                    onClick={() => setSelectedSuggestion(null)}
+                                    className="absolute top-4 right-4 p-2 rounded-full bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors z-10"
+                                >
+                                    <X size={20} />
+                                </button>
+
+                                <div className="p-8 overflow-y-auto custom-scrollbar">
+                                    <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                                        <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><FileText size={24}/></div>
+                                        Detalhes do Feedback
+                                    </h3>
+
+                                    <div className="flex gap-4 mb-6">
+                                       <span className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-bold border ${selectedSuggestion.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : selectedSuggestion.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{selectedSuggestion.role}</span>
+                                       <span className={`px-3 py-1 rounded-full text-xs uppercase font-bold border flex items-center ${selectedSuggestion.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : selectedSuggestion.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{selectedSuggestion.sentiment}</span>
+                                    </div>
+
+                                    <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-800">
+                                        <p className="text-slate-300 leading-relaxed text-lg whitespace-pre-wrap">
+                                            {selectedSuggestion.text}
+                                        </p>
+                                    </div>
+                                    
+                                    <div className="mt-6 flex justify-end">
+                                        <button
+                                            onClick={() => setSelectedSuggestion(null)}
+                                            className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors"
+                                        >
+                                            Fechar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         );
