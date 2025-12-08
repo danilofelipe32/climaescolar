@@ -7,13 +7,13 @@ import autoTable from 'jspdf-autotable';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, 
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, LabelList,
-    PieChart, Pie, Cell, Legend
+    PieChart, Pie, Cell, Legend, LineChart, Line
 } from 'recharts';
 import { 
     Shield, School, MessageSquare, AlertTriangle, Upload, FileText, Heart, Activity, 
     CheckCircle, Sparkles, BrainCircuit, FileDown, Loader2, Calculator, Settings,
     Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet, BarChart3, Eye, X,
-    ArrowUpDown, ArrowUp, ArrowDown
+    ArrowUpDown, ArrowUp, ArrowDown, Calendar
 } from 'lucide-react';
 
 import { Sidebar, KpiCard, SuggestionCard, DarkTooltip, MarkdownRenderers } from './components/Components';
@@ -33,11 +33,11 @@ const REPORT_SAFETY_BY_ROLE = [
     { name: 'Aluno (M)', Segurança: 4.0 }, { name: 'Aluno (F)', Segurança: 3.8 }, { name: 'Outros', Segurança: 0.0 }
 ];
 const REPORT_SUGGESTIONS: Suggestion[] = [
-    { id: 1, role: "Professor (a)", text: "Uma portaria mais atenta e sensível, a sala do núcleo aberta diariamente.", sentiment: "Neutro" },
-    { id: 2, role: "Professor (a)", text: "A criação de uma de escuta seria o mais urgente no momento.", sentiment: "Negativo" },
-    { id: 3, role: "Aluno (a)", text: "Mais respeito na sala de aula, isso é o que está faltando.", sentiment: "Negativo" },
-    { id: 4, role: "Funcionário (a)", text: "Manter o portão fechado e sempre com o porteiro no seu local.", sentiment: "Neutro" },
-    { id: 5, role: "Aluno (a)", text: "Fechaduras novas, merenda melhor.", sentiment: "Negativo" }
+    { id: 1, role: "Professor (a)", text: "Uma portaria mais atenta e sensível, a sala do núcleo aberta diariamente.", sentiment: "Neutro", timestamp: "2023-10-01" },
+    { id: 2, role: "Professor (a)", text: "A criação de uma de escuta seria o mais urgente no momento.", sentiment: "Negativo", timestamp: "2023-10-02" },
+    { id: 3, role: "Aluno (a)", text: "Mais respeito na sala de aula, isso é o que está faltando.", sentiment: "Negativo", timestamp: "2023-10-03" },
+    { id: 4, role: "Funcionário (a)", text: "Manter o portão fechado e sempre com o porteiro no seu local.", sentiment: "Neutro", timestamp: "2023-10-05" },
+    { id: 5, role: "Aluno (a)", text: "Fechaduras novas, merenda melhor.", sentiment: "Negativo", timestamp: "2023-10-06" }
 ];
 const REPORT_ADVANCED_STATS: AdvancedStat[] = [
     { metric: "Segurança", mean: 3.8, median: 4.0, mode: 4, stdDev: 0.8, interpretation: "Consenso Positivo" },
@@ -166,7 +166,8 @@ const App: React.FC = () => {
             id: i, 
             role: d.role, 
             text: d.suggestion,
-            sentiment: analyzeSentiment(d.suggestion) 
+            sentiment: analyzeSentiment(d.suggestion),
+            timestamp: d.timestamp
         }));
         setSuggestions(newSuggestions);
         calculateSentimentStats(newSuggestions);
@@ -590,8 +591,6 @@ const App: React.FC = () => {
         ].filter(item => item.value > 0);
 
         // Prepare Data for Stacked Bar Chart (Role vs Sentiment)
-        // Note: Using global 'suggestions' to show the full landscape, or could use filtered if desired.
-        // Usually breakdown charts show the whole picture. Let's exclude 'Todos'.
         const roleSentimentData = uniqueRoles.filter(r => r !== 'Todos').map(role => {
             const roleSuggestions = suggestions.filter(s => s.role === role);
             const positive = roleSuggestions.filter(s => s.sentiment === 'Positivo').length;
@@ -604,6 +603,46 @@ const App: React.FC = () => {
                 Negativo: negative
             };
         });
+
+        // Prepare Data for Trend Chart (Timestamp vs Sentiment)
+        const trendData = React.useMemo(() => {
+            const grouped: Record<string, { date: string, Positivo: number, Neutro: number, Negativo: number }> = {};
+            
+            // Use global suggestions or filtered? 
+            // Typically trend is useful for the current view, but let's stick to 'filteredReportSuggestions' 
+            // so the user can see trends for specific roles if they filter by role.
+            filteredReportSuggestions.forEach(s => {
+                // Extract simple date YYYY-MM-DD. 
+                // Assuming timestamp format 'DD/MM/YYYY HH:mm:ss' or ISO. 
+                // Let's try to be robust.
+                let dateKey = 'N/A';
+                if (s.timestamp) {
+                    // If it matches ISO-like YYYY-MM-DD
+                    if (s.timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
+                        dateKey = s.timestamp.substring(0, 10);
+                    } 
+                    // If it matches DD/MM/YYYY
+                    else if (s.timestamp.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)) {
+                        // Normalize to sortable YYYY-MM-DD for the chart
+                        const parts = s.timestamp.split(' ')[0].split('/');
+                        if (parts.length === 3) {
+                            dateKey = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                        }
+                    } else {
+                        // Fallback just take first 10 chars
+                        dateKey = s.timestamp.substring(0, 10);
+                    }
+                }
+
+                if (!grouped[dateKey]) {
+                    grouped[dateKey] = { date: dateKey, Positivo: 0, Neutro: 0, Negativo: 0 };
+                }
+                grouped[dateKey][s.sentiment]++;
+            });
+
+            return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
+        }, [filteredReportSuggestions]);
+
 
         return (
             <div className="animate-in space-y-6">
@@ -659,7 +698,31 @@ const App: React.FC = () => {
                         </div>
                     </div>
                     
-                    {/* NEW STACKED BAR CHART SECTION */}
+                    {/* NEW TREND CHART SECTION */}
+                    {trendData.length > 0 && (
+                        <div className="bg-[#0f172a]/50 p-6 rounded-2xl border border-slate-800 mb-8">
+                            <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
+                                <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><Calendar size={18}/></div>
+                                Evolução Temporal dos Sentimentos
+                            </h3>
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={trendData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                                        <XAxis dataKey="date" tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                                        <RechartsTooltip content={<DarkTooltip />} cursor={{ stroke: '#334155', strokeWidth: 1 }} />
+                                        <Legend wrapperStyle={{paddingTop: '20px'}} />
+                                        <Line type="monotone" dataKey="Positivo" stroke="#4ade80" strokeWidth={3} dot={{r: 4, fill: '#4ade80'}} />
+                                        <Line type="monotone" dataKey="Neutro" stroke="#94a3b8" strokeWidth={3} dot={{r: 4, fill: '#94a3b8'}} />
+                                        <Line type="monotone" dataKey="Negativo" stroke="#f87171" strokeWidth={3} dot={{r: 4, fill: '#f87171'}} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STACKED BAR CHART SECTION */}
                     {roleSentimentData.length > 0 && (
                         <div className="bg-[#0f172a]/50 p-6 rounded-2xl border border-slate-800 mb-8">
                             <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">

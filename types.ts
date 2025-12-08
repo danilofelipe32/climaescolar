@@ -14,6 +14,7 @@ export interface Suggestion {
   role: string;
   text: string;
   sentiment: 'Positivo' | 'Neutro' | 'Negativo';
+  timestamp: string;
 }
 
 export interface Stats {
