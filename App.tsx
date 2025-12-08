@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -45,23 +46,35 @@ const REPORT_ADVANCED_STATS: AdvancedStat[] = [
     { metric: "Respeito", mean: 3.2, median: 3.0, mode: 3, stdDev: 1.1, interpretation: "Variabilidade Moderada" }
 ];
 const REPORT_AI_ANALYSIS = `
-## 📊 Diagnóstico Executivo
+## 📊 Resumo Executivo Contextualizado
 
-> O clima escolar encontra-se em um estado de **vulnerabilidade crítica**. A percepção de segurança não condiz com os indicadores de violência.
+> O diagnóstico atual revela um cenário de **paradoxo institucional**. Embora a percepção média de segurança seja moderadamente positiva (3.8/5), existe uma taxa de violência alarmante de **21.6%**. Isso sugere uma possível **normalização de comportamentos agressivos** ou uma "cegueira situacional", onde a comunidade se sente segura apenas por hábito, ignorando riscos latentes.
+>
+> Além disso, a correlação entre a infraestrutura precária (2.1/5) e a saúde mental crítica (1.2/5) é inegável. O ambiente físico degradado (fechaduras quebradas, falta de limpeza) atua como um **estressor ambiental constante**, enviando uma mensagem implícita de abandono que corrói a autoestima de alunos e professores, resultando em um pedido de socorro emocional evidente nos comentários.
 
-## 🚩 Pontos Críticos
+## 🧠 Análise Psicossocial
 
-| Área Crítica | Score | Impacto Identificado |
-| :--- | :---: | :--- |
-| **Apoio Psicossocial** | **0.4** | Ausência total de escuta; risco alto de crises emocionais. |
-| **Infraestrutura** | **1.2** | Ambiente degradado (limpeza, trancas) gera sensação de abandono. |
-| **Controle de Acesso** | **0.0** | Falha grave na portaria (percepção de visitantes/externos). |
+A análise qualitativa dos comentários indica um clima emocional marcado pela **desamparo aprendido**. Professores e alunos expressam frustração não apenas com problemas pontuais, mas com a *falta de escuta sistemática*. A repetição de termos como "urgente", "medo" e "falta" denota um esgotamento da resiliência coletiva. Sem intervenção, o risco de **burnout docente** e **evasão escolar** por desmotivação é altíssimo.
 
-## 💡 Plano de Ação Imediato
+## 🚩 Matriz de Vulnerabilidades Críticas
 
-* **Protocolo de Escuta Ativa:** Manter a sala do núcleo aberta diariamente.
-* **Mutirão de Segurança:** Reparo imediato de fechaduras e trancas.
-* **Revisão de Portaria:** Treinamento e controle rigoroso de acesso.
+| Área Crítica | Evidência (Dados/Falas) | Consequência Pedagógica e Social |
+| :--- | :--- | :--- |
+| **Saúde Mental** | Score 1.2/5 e demanda por "escuta" | Bloqueio cognitivo para aprendizagem; aumento de conflitos interpessoais e crises de ansiedade em sala. |
+| **Infraestrutura** | Score 2.1/5 (fechaduras, limpeza) | Sensação de insegurança física; degradação do patrimônio por falta de pertencimento ("teoria das janelas quebradas"). |
+| **Gestão de Acesso** | Relatos de portaria falha | Exposição real a riscos externos; quebra da confiança institucional entre família e escola. |
+
+## 💡 Plano de Intervenção Estratégica
+
+* **Instituir Núcleo de Escuta Ativa:**
+    * *Ação:* Operacionalizar a sala do núcleo diariamente com escala rotativa.
+    * *Justificativa:* O acolhimento imediato reduz a tensão latente e previne a escalada de conflitos.
+* **Programa "Escola Segura e Limpa":**
+    * *Ação:* Mutirão emergencial para reparo de trancas e limpeza do entorno.
+    * *Justificativa:* A melhoria visual imediata restaura o senso de dignidade e ordem, impactando positivamente o comportamento.
+* **Protocolo Rigoroso de Acesso:**
+    * *Ação:* Revisão total dos procedimentos de portaria e identificação obrigatória.
+    * *Justificativa:* Eliminar a vulnerabilidade física é pré-requisito para que o processo pedagógico ocorra com tranquilidade.
 `;
 
 const App: React.FC = () => {
@@ -609,7 +622,8 @@ const App: React.FC = () => {
         const criticalPointsSection = React.useMemo(() => {
             if (!analysis) return null;
             // Regex to match "## ... Pontos Críticos" until the next "##"
-            const match = analysis.match(/##\s*[^\n]*Pontos Críticos[\s\S]*?(?=\n##|$)/i);
+            // Adjusted regex to match the new title "Matriz de Vulnerabilidades Críticas" or similar variations
+            const match = analysis.match(/##\s*[^\n]*(Pontos Críticos|Vulnerabilidades Críticas)[\s\S]*?(?=\n##|$)/i);
             return match ? match[0] : null;
         }, [analysis]);
 
