@@ -41,7 +41,8 @@ export const generateSchoolReport = async (
        - Interprete o "tom" dos comentários. Há medo? Resignação? Raiva? Esperança?
        - Explique as consequências de longo prazo se os indicadores de Saúde Mental (${stats.avgMentalHealth}) não forem tratados.
 
-    3. **Matriz de Vulnerabilidades Críticas** (Tabela Markdown):
+    3. **Matriz de Vulnerabilidades Críticas** (Tabela Markdown ESTRITA):
+       - IMPORTANTE: Deixe SEMPRE uma linha em branco antes da tabela e NÃO use indentação.
        - Colunas: | Área Crítica | Evidência (Dados/Falas) | Consequência Pedagógica e Social |
        - Seja específico nas consequências (ex: "Evasão escolar", "Burnout docente", "Baixo rendimento").
 

@@ -45,6 +45,8 @@ const REPORT_ADVANCED_STATS: AdvancedStat[] = [
     { metric: "Saúde Mental", mean: 1.2, median: 1.0, mode: 1, stdDev: 0.4, interpretation: "Consenso Crítico (Baixo)" },
     { metric: "Respeito", mean: 3.2, median: 3.0, mode: 3, stdDev: 1.1, interpretation: "Variabilidade Moderada" }
 ];
+
+// Note: Ensure strictly no indentation for the table part to avoid Markdown parsing issues
 const REPORT_AI_ANALYSIS = `
 ## 📊 Resumo Executivo Contextualizado
 
@@ -621,10 +623,16 @@ const App: React.FC = () => {
         // Critical Points Extraction
         const criticalPointsSection = React.useMemo(() => {
             if (!analysis) return null;
-            // Regex to match "## ... Pontos Críticos" until the next "##"
-            // Adjusted regex to match the new title "Matriz de Vulnerabilidades Críticas" or similar variations
-            const match = analysis.match(/##\s*[^\n]*(Pontos Críticos|Vulnerabilidades Críticas)[\s\S]*?(?=\n##|$)/i);
-            return match ? match[0] : null;
+            // Regex to match "## ... Pontos Críticos" or similar headers, capturing everything AFTER the header until the next "##"
+            // Capturing group ([\s\S]*?) contains the table content.
+            const match = analysis.match(/##\s*[^\n]*(Pontos Críticos|Vulnerabilidades Críticas)([\s\S]*?)(?=\n##|$)/i);
+            
+            if (match && match[2]) {
+                // Return only the content (match[2]) prefixed with newlines to ensure Markdown table renders correctly
+                // stripping the header "## ..." because we display our own header in the UI
+                return "\n\n" + match[2].trim();
+            }
+            return null;
         }, [analysis]);
 
         return (

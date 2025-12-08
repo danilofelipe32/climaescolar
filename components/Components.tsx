@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
     LayoutDashboard, Calculator, FileText, Settings, Shield, School, 
@@ -164,5 +165,5 @@ export const MarkdownRenderers = {
     tbody: ({node, ...props}: any) => <tbody className="divide-y divide-slate-800" {...props} />,
     tr: ({node, ...props}: any) => <tr className="hover:bg-slate-800/50 transition-colors group" {...props} />,
     th: ({node, ...props}: any) => <th className="px-6 py-4 font-bold text-cyan-500/80" {...props} />,
-    td: ({node, ...props}: any) => <td className="px-6 py-4 text-slate-300 align-top group-hover:text-white transition-colors leading-relaxed" {...props} />,
+    td: ({node, ...props}: any) => <td className="px-6 py-4 text-slate-300 align-top group-hover:text-white transition-colors leading-relaxed break-words min-w-[140px]" {...props} />,
 };
