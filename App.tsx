@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -740,29 +739,30 @@ const App: React.FC = () => {
                         <div><h2 className="text-3xl font-bold text-white flex items-center gap-3"><FileText size={32} className="text-cyan-400" /> Relatório Detalhado</h2></div>
                         <div className="bg-slate-900 px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 font-mono text-sm shadow-inner">Total Filtrado: <span className="text-white font-bold">{sortedSuggestions.length}</span></div>
                     </div>
-                    <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/50">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm text-slate-400">
-                                <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider">
-                                    <tr>
-                                        <th onClick={() => requestSort('role')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
-                                            <div className="flex items-center gap-2">Role {getSortIcon('role')}</div>
-                                        </th>
-                                        <th onClick={() => requestSort('timestamp')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
-                                            <div className="flex items-center gap-2">Data {getSortIcon('timestamp')}</div>
-                                        </th>
-                                        <th onClick={() => requestSort('sentiment')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
-                                             <div className="flex items-center gap-2">Sentimento {getSortIcon('sentiment')}</div>
-                                        </th>
-                                        <th onClick={() => requestSort('text')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
-                                             <div className="flex items-center gap-2">Feedback {getSortIcon('text')}</div>
-                                        </th>
-                                        <th className="px-6 py-5 border-b border-slate-800 text-right">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800">
-                                    {sortedSuggestions.length > 0 ? (
-                                        sortedSuggestions.map((sug) => (
+                    
+                    {sortedSuggestions.length > 0 ? (
+                        <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/50">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm text-slate-400">
+                                    <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider">
+                                        <tr>
+                                            <th onClick={() => requestSort('role')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
+                                                <div className="flex items-center gap-2">Role {getSortIcon('role')}</div>
+                                            </th>
+                                            <th onClick={() => requestSort('timestamp')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
+                                                <div className="flex items-center gap-2">Data {getSortIcon('timestamp')}</div>
+                                            </th>
+                                            <th onClick={() => requestSort('sentiment')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
+                                                <div className="flex items-center gap-2">Sentimento {getSortIcon('sentiment')}</div>
+                                            </th>
+                                            <th onClick={() => requestSort('text')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
+                                                <div className="flex items-center gap-2">Feedback {getSortIcon('text')}</div>
+                                            </th>
+                                            <th className="px-6 py-5 border-b border-slate-800 text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800">
+                                        {sortedSuggestions.map((sug) => (
                                             <tr 
                                                 key={sug.id} 
                                                 className={`hover:bg-slate-800/50 transition-colors group ${sug.sentiment === 'Negativo' ? 'bg-red-950/5 hover:bg-red-900/10 border-l-2 border-red-500' : ''}`}
@@ -789,14 +789,30 @@ const App: React.FC = () => {
                                                     </button>
                                                 </td>
                                             </tr>
-                                        ))
-                                    ) : (
-                                        <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-600 italic">Nenhum dado disponível.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-16 px-4 bg-slate-900/30 rounded-2xl border border-slate-800 border-dashed animate-in">
+                            <div className="p-4 bg-slate-800 rounded-full mb-4 text-slate-500 shadow-inner">
+                                <Filter size={32} />
+                            </div>
+                            <h3 className="text-lg font-bold text-white mb-2">Nenhum resultado encontrado</h3>
+                            <p className="text-slate-400 text-center max-w-md mb-6">
+                                Não encontramos sugestões que correspondam aos filtros de 
+                                <span className="text-cyan-400 font-bold mx-1">{reportRoleFilter}</span> e 
+                                <span className="text-cyan-400 font-bold mx-1">{reportSentimentFilter}</span>. 
+                            </p>
+                            <button 
+                                onClick={() => { setReportRoleFilter('Todos'); setReportSentimentFilter('Todos'); }}
+                                className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all border border-slate-700 hover:border-slate-600 shadow-lg"
+                            >
+                                Limpar Filtros
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Modal for Details */}
