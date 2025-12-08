@@ -799,9 +799,17 @@ const App: React.FC = () => {
                                     </div>
 
                                     <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-800">
-                                        <p className="text-slate-300 leading-relaxed text-lg whitespace-pre-wrap">
-                                            {selectedSuggestion.text}
-                                        </p>
+                                        <div className="markdown-body">
+                                            <ReactMarkdown 
+                                                remarkPlugins={[remarkGfm]}
+                                                components={{
+                                                    ...MarkdownRenderers,
+                                                    p: ({node, ...props}: any) => <p className="text-slate-300 mb-4 leading-relaxed text-lg" {...props} />
+                                                }}
+                                            >
+                                                {selectedSuggestion.text}
+                                            </ReactMarkdown>
+                                        </div>
                                     </div>
                                     
                                     <div className="mt-6 flex justify-end">
