@@ -272,11 +272,9 @@ const App: React.FC = () => {
         }
     };
 
-    const handleGenerateComparativeAnalysis = async () => {
+    const handleGenerateComparativeAnalysis = async (sortedDatasets: Dataset[]) => {
         setLoadingCompAI(true);
         try {
-            // Sort datasets by name to approximate date order if logic exists, otherwise use existing order
-            const sortedDatasets = [...datasets].sort((a,b) => a.name.localeCompare(b.name));
             const report = await generateComparativeReport(sortedDatasets);
             setCompAnalysis(report);
         } catch (err) {
@@ -386,8 +384,11 @@ const App: React.FC = () => {
 
         const colors = ['#3b82f6', '#10b981', '#f97316', '#a855f7', '#ec4899', '#ef4444', '#06b6d4', '#84cc16'];
         
-        // Sort datasets by name (assuming name implies date) for consistent Trend lines
-        const sortedDatasets = [...datasets].sort((a,b) => a.name.localeCompare(b.name));
+        // Robust Sort: Numeric sort if possible, otherwise string sort. 
+        // Important for timeline accuracy.
+        const sortedDatasets = useMemo(() => {
+            return [...datasets].sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+        }, [datasets]);
 
         // Prepare Trend Data (Line Charts)
         const trendData = sortedDatasets.map(ds => ({
@@ -412,16 +413,33 @@ const App: React.FC = () => {
 
         // Delta Calculation Helper
         const getDelta = (curr: number, prev: number, inverse = false) => {
-            if (!prev) return null;
+            if (isNaN(curr) || isNaN(prev) || prev === 0) return null;
             const diff = curr - prev;
             const percent = (diff / prev) * 100;
+            // Good if: (not inverse AND increased) OR (inverse AND decreased)
             const isGood = inverse ? diff < 0 : diff > 0;
-            return { diff, percent, isGood };
+            const isNeutral = Math.abs(diff) < 0.05; // Tolerance
+            return { diff, percent, isGood, isNeutral };
         };
 
         // Last two datasets for delta cards
         const currDS = sortedDatasets[sortedDatasets.length - 1];
         const prevDS = sortedDatasets[sortedDatasets.length - 2];
+
+        // Overall Win/Loss Calculation
+        const wins = [
+            getDelta(parseFloat(currDS.stats.avgSafety), parseFloat(prevDS.stats.avgSafety)),
+            getDelta(parseFloat(currDS.stats.avgFacilities), parseFloat(prevDS.stats.avgFacilities)),
+            getDelta(parseFloat(currDS.stats.avgMentalHealth), parseFloat(prevDS.stats.avgMentalHealth)),
+            getDelta(parseFloat(currDS.stats.violencePerc), parseFloat(prevDS.stats.violencePerc), true), // Inverse
+        ].filter(d => d && d.isGood && !d.isNeutral).length;
+        
+        const losses = [
+            getDelta(parseFloat(currDS.stats.avgSafety), parseFloat(prevDS.stats.avgSafety)),
+            getDelta(parseFloat(currDS.stats.avgFacilities), parseFloat(prevDS.stats.avgFacilities)),
+            getDelta(parseFloat(currDS.stats.avgMentalHealth), parseFloat(prevDS.stats.avgMentalHealth)),
+            getDelta(parseFloat(currDS.stats.violencePerc), parseFloat(prevDS.stats.violencePerc), true), // Inverse
+        ].filter(d => d && !d.isGood && !d.isNeutral).length;
 
         const DeltaCard = ({ title, curr, prev, unit = "", inverse = false, icon: Icon }: any) => {
             const delta = getDelta(parseFloat(curr), parseFloat(prev), inverse);
@@ -429,17 +447,19 @@ const App: React.FC = () => {
                 <div className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition-colors">
                      <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                            <Icon size={14} /> {title}
+                            <Icon size={14} className="text-slate-500 group-hover:text-cyan-400 transition-colors" /> {title}
                         </div>
                      </div>
                      <div className="text-3xl font-black text-white mb-2">{curr}<span className="text-sm font-normal text-slate-500 ml-1">{unit}</span></div>
                      
-                     {delta && (
-                         <div className={`flex items-center gap-1 text-xs font-bold ${delta.diff === 0 ? 'text-slate-500' : delta.isGood ? 'text-green-400' : 'text-red-400'}`}>
-                             {delta.diff > 0 ? <TrendingUp size={14} /> : delta.diff < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+                     {delta ? (
+                         <div className={`flex items-center gap-1 text-xs font-bold ${delta.isNeutral ? 'text-slate-500' : delta.isGood ? 'text-green-400' : 'text-red-400'}`}>
+                             {delta.isNeutral ? <Minus size={14} /> : delta.diff > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                              <span>{Math.abs(delta.percent).toFixed(1)}%</span>
                              <span className="text-slate-600 font-medium ml-1">vs anterior</span>
                          </div>
+                     ) : (
+                        <div className="text-xs text-slate-600 font-medium">- sem dados ant. -</div>
                      )}
                 </div>
             );
@@ -450,41 +470,72 @@ const App: React.FC = () => {
              const num = parseFloat(val);
              const max = Math.max(...allVals);
              const min = Math.min(...allVals);
-             let colorClass = "text-slate-400";
-             
-             if (!inverse) {
-                 if (num === max && max !== min) colorClass = "text-green-400 font-bold bg-green-900/20 rounded px-1";
-                 if (num === min && max !== min) colorClass = "text-red-400 font-bold bg-red-900/20 rounded px-1";
-             } else {
-                 if (num === min && max !== min) colorClass = "text-green-400 font-bold bg-green-900/20 rounded px-1";
-                 if (num === max && max !== min) colorClass = "text-red-400 font-bold bg-red-900/20 rounded px-1";
-             }
+             const isEqual = max === min;
 
-             return <span className={colorClass}>{val}</span>;
+             // Logic: If inverse (e.g. violence), Lowest is Best.
+             const isBest = inverse ? num === min : num === max;
+             const isWorst = inverse ? num === max : num === min;
+
+             if (isEqual) return <span className="text-slate-500 font-mono">{val}</span>;
+
+             if (isBest) return (
+                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-500/10 border border-green-500/20 text-green-400 font-bold font-mono text-xs">
+                     {val} <Sparkles size={10} strokeWidth={3} />
+                 </div>
+             );
+             
+             if (isWorst) return (
+                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 font-bold font-mono text-xs">
+                     {val} <AlertTriangle size={10} strokeWidth={3} />
+                 </div>
+             );
+
+             return <span className="text-slate-400 font-mono">{val}</span>;
         };
 
         return (
             <div className="animate-in space-y-8 pb-20">
+                {/* Header Section */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl">
                      <div>
                         <h2 className="text-2xl font-bold text-white flex items-center gap-3">
                              <GitCompare size={28} className="text-cyan-400" /> Comparativo Evolutivo
                         </h2>
-                        <p className="text-slate-400 text-sm mt-1">Analisando trajetória entre <strong className="text-white">{sortedDatasets[0].name}</strong> e <strong className="text-white">{sortedDatasets[sortedDatasets.length-1].name}</strong></p>
+                        <p className="text-slate-400 text-sm mt-1">
+                            Análise temporal: <strong className="text-white">{sortedDatasets[0].name}</strong> ➔ <strong className="text-white">{currDS.name}</strong>
+                        </p>
                      </div>
                      
                      {!loadingCompAI ? (
                         <button 
-                            onClick={handleGenerateComparativeAnalysis}
+                            onClick={() => handleGenerateComparativeAnalysis(sortedDatasets)}
                             className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-purple-900/50 active:scale-95 transition-all"
                         >
                             <Sparkles size={16} /> Gerar Inteligência Comparativa
                         </button>
                      ) : (
                         <div className="flex items-center gap-2 text-purple-400 text-sm font-bold animate-pulse px-4">
-                            <Loader2 size={18} className="animate-spin" /> Analisando Múltiplos Datasets...
+                            <Loader2 size={18} className="animate-spin" /> Analisando Trajetória...
                         </div>
                      )}
+                </div>
+
+                {/* Scoreboard Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-green-950/20 border border-green-900/50 p-4 rounded-2xl flex items-center gap-4">
+                        <div className="p-3 bg-green-900/40 rounded-full text-green-400"><TrendingUp size={20} /></div>
+                        <div>
+                            <div className="text-2xl font-black text-white">{wins}</div>
+                            <div className="text-xs text-green-400 uppercase font-bold tracking-wider">Indicadores em Melhora</div>
+                        </div>
+                    </div>
+                    <div className="bg-red-950/20 border border-red-900/50 p-4 rounded-2xl flex items-center gap-4">
+                        <div className="p-3 bg-red-900/40 rounded-full text-red-400"><AlertTriangle size={20} /></div>
+                        <div>
+                            <div className="text-2xl font-black text-white">{losses}</div>
+                            <div className="text-xs text-red-400 uppercase font-bold tracking-wider">Pontos de Atenção/Piora</div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* AI Analysis Section */}
@@ -502,7 +553,7 @@ const App: React.FC = () => {
                      </div>
                 )}
                 
-                {/* Delta Cards */}
+                {/* Delta Cards - Comparing Last 2 */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <DeltaCard title="Segurança" curr={currDS.stats.avgSafety} prev={prevDS.stats.avgSafety} icon={Shield} />
                     <DeltaCard title="Infraestrutura" curr={currDS.stats.avgFacilities} prev={prevDS.stats.avgFacilities} icon={School} />
@@ -512,47 +563,47 @@ const App: React.FC = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                      {/* Line Chart: Evolution */}
-                     <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-800">
+                     <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-800 shadow-lg">
                         <h3 className="text-white font-bold mb-6 flex items-center gap-2"><TrendingUp size={20} className="text-cyan-400" /> Evolução dos Indicadores</h3>
-                        <div className="h-[300px] w-full">
+                        <div className="h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={trendData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                                <LineChart data={trendData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} domain={[0, 5]} />
                                     <RechartsTooltip content={<DarkTooltip />} />
-                                    <Legend />
-                                    <Line type="monotone" dataKey="Safety" name="Segurança" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
-                                    <Line type="monotone" dataKey="Facilities" name="Infraestrutura" stroke="#f97316" strokeWidth={3} dot={{r: 4}} />
-                                    <Line type="monotone" dataKey="MentalHealth" name="Saúde Mental" stroke="#ec4899" strokeWidth={3} dot={{r: 4}} />
+                                    <Legend wrapperStyle={{paddingTop: '20px'}} />
+                                    <Line type="monotone" dataKey="Safety" name="Segurança" stroke="#3b82f6" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} activeDot={{r: 7}} />
+                                    <Line type="monotone" dataKey="Facilities" name="Infraestrutura" stroke="#f97316" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} />
+                                    <Line type="monotone" dataKey="MentalHealth" name="Saúde Mental" stroke="#ec4899" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
                      </div>
 
                      {/* Area Chart: Violence & Sentiment */}
-                     <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-800">
+                     <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-800 shadow-lg">
                         <h3 className="text-white font-bold mb-6 flex items-center gap-2"><Activity size={20} className="text-red-400" /> Correlação Violência vs Sentimento</h3>
-                        <div className="h-[300px] w-full">
+                        <div className="h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={trendData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                                <AreaChart data={trendData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                                     <defs>
                                         <linearGradient id="colorViolence" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
                                             <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
                                         </linearGradient>
                                         <linearGradient id="colorPos" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
                                             <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} />
-                                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{fill: '#ef4444'}} domain={[0, 100]} label={{ value: 'Violência %', angle: -90, position: 'insideLeft', fill: '#ef4444' }} />
-                                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{fill: '#10b981'}} domain={[0, 100]} label={{ value: 'Sentimento Positivo %', angle: 90, position: 'insideRight', fill: '#10b981' }} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
+                                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{fill: '#ef4444'}} domain={[0, 100]} label={{ value: 'Violência %', angle: -90, position: 'insideLeft', fill: '#ef4444', dy: 40 }} />
+                                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{fill: '#10b981'}} domain={[0, 100]} label={{ value: 'Sentimento Positivo %', angle: 90, position: 'insideRight', fill: '#10b981', dy: 50 }} />
                                     <RechartsTooltip content={<DarkTooltip />} />
-                                    <Area yAxisId="left" type="monotone" dataKey="Violence" name="Violência (%)" stroke="#ef4444" fillOpacity={1} fill="url(#colorViolence)" />
-                                    <Area yAxisId="right" type="monotone" dataKey="PositiveSent" name="Positividade (%)" stroke="#10b981" fillOpacity={1} fill="url(#colorPos)" />
+                                    <Area yAxisId="left" type="monotone" dataKey="Violence" name="Violência (%)" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorViolence)" />
+                                    <Area yAxisId="right" type="monotone" dataKey="PositiveSent" name="Positividade (%)" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorPos)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
@@ -560,58 +611,55 @@ const App: React.FC = () => {
                 </div>
                 
                 {/* Heatmap Data Table */}
-                <div className="bg-[#1e293b] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-                    <div className="p-6 border-b border-slate-800"><h3 className="text-white font-bold">Matriz de Dados (Heatmap)</h3></div>
+                <div className="bg-[#1e293b] rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
+                    <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+                        <h3 className="text-white font-bold text-lg">Matriz de Dados (Heatmap)</h3>
+                        <div className="text-xs text-slate-500 font-mono">Best (Verde) / Worst (Vermelho)</div>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm text-slate-400">
                              <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider">
                                  <tr>
-                                     <th className="px-6 py-4">Indicador</th>
+                                     <th className="px-6 py-5">Indicador</th>
                                      {sortedDatasets.map((ds, idx) => (
-                                         <th key={ds.id} className="px-6 py-4" style={{ color: colors[idx % colors.length] }}>
+                                         <th key={ds.id} className="px-6 py-5 text-center min-w-[120px]" style={{ color: colors[idx % colors.length] }}>
                                              {ds.name}
                                          </th>
                                      ))}
                                  </tr>
                              </thead>
                              <tbody className="divide-y divide-slate-800 bg-slate-900/50">
-                                 <tr>
-                                     <td className="px-6 py-4 font-bold text-white">Segurança (0-5)</td>
-                                     {sortedDatasets.map(ds => (
-                                        <td key={ds.id} className="px-6 py-4 font-mono">
-                                            <HeatmapCell val={ds.stats.avgSafety} allVals={sortedDatasets.map(d => parseFloat(d.stats.avgSafety))} />
+                                 {[
+                                     { label: 'Segurança (0-5)', key: 'avgSafety', inverse: false },
+                                     { label: 'Infraestrutura (0-5)', key: 'avgFacilities', inverse: false },
+                                     { label: 'Saúde Mental (0-5)', key: 'avgMentalHealth', inverse: false },
+                                     { label: 'Violência (%)', key: 'violencePerc', inverse: true },
+                                 ].map(row => (
+                                    <tr key={row.key} className="hover:bg-slate-800/50 transition-colors">
+                                        <td className="px-6 py-5 font-bold text-white flex items-center gap-2">
+                                            {row.label}
                                         </td>
-                                     ))}
-                                 </tr>
-                                 <tr>
-                                     <td className="px-6 py-4 font-bold text-white">Infraestrutura (0-5)</td>
+                                        {sortedDatasets.map(ds => (
+                                            <td key={ds.id} className="px-6 py-5 text-center">
+                                                <HeatmapCell 
+                                                    val={ds.stats[row.key as keyof Stats]} 
+                                                    allVals={sortedDatasets.map(d => parseFloat(d.stats[row.key as keyof Stats] as string))} 
+                                                    inverse={row.inverse} 
+                                                />
+                                            </td>
+                                        ))}
+                                    </tr>
+                                 ))}
+                                 {/* Sentiment Row Special Case */}
+                                 <tr className="hover:bg-slate-800/50 transition-colors">
+                                     <td className="px-6 py-5 font-bold text-white">Sentimento Positivo (%)</td>
                                      {sortedDatasets.map(ds => (
-                                        <td key={ds.id} className="px-6 py-4 font-mono">
-                                            <HeatmapCell val={ds.stats.avgFacilities} allVals={sortedDatasets.map(d => parseFloat(d.stats.avgFacilities))} />
-                                        </td>
-                                     ))}
-                                 </tr>
-                                 <tr>
-                                     <td className="px-6 py-4 font-bold text-white">Saúde Mental (0-5)</td>
-                                     {sortedDatasets.map(ds => (
-                                        <td key={ds.id} className="px-6 py-4 font-mono">
-                                            <HeatmapCell val={ds.stats.avgMentalHealth} allVals={sortedDatasets.map(d => parseFloat(d.stats.avgMentalHealth))} />
-                                        </td>
-                                     ))}
-                                 </tr>
-                                 <tr>
-                                     <td className="px-6 py-4 font-bold text-white">Violência (%)</td>
-                                     {sortedDatasets.map(ds => (
-                                        <td key={ds.id} className="px-6 py-4 font-mono">
-                                            <HeatmapCell val={ds.stats.violencePerc} allVals={sortedDatasets.map(d => parseFloat(d.stats.violencePerc))} inverse={true} />
-                                        </td>
-                                     ))}
-                                 </tr>
-                                  <tr>
-                                     <td className="px-6 py-4 font-bold text-white">Sentimento Positivo (%)</td>
-                                     {sortedDatasets.map(ds => (
-                                        <td key={ds.id} className="px-6 py-4 font-mono">
-                                            <HeatmapCell val={ds.sentimentStats.positive} allVals={sortedDatasets.map(d => d.sentimentStats.positive)} />
+                                        <td key={ds.id} className="px-6 py-5 text-center">
+                                            <HeatmapCell 
+                                                val={ds.sentimentStats.positive} 
+                                                allVals={sortedDatasets.map(d => d.sentimentStats.positive)} 
+                                                inverse={false}
+                                            />
                                         </td>
                                      ))}
                                  </tr>
@@ -620,14 +668,14 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Radar Overlay - Keep existing but improve container */}
-                <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-800">
+                {/* Radar Overlay */}
+                <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl">
                     <h3 className="text-white font-bold mb-4">Sobreposição de Clima (Radar)</h3>
-                    <div className="h-[400px] w-full">
+                    <div className="h-[500px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarComparisonData}>
+                            <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarComparisonData}>
                                 <PolarGrid stroke="#334155" />
-                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} />
+                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 13, fontWeight: 'bold' }} />
                                 <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
                                 <RechartsTooltip content={<DarkTooltip />} />
                                 <Legend />
@@ -637,9 +685,9 @@ const App: React.FC = () => {
                                         name={ds.name} 
                                         dataKey={ds.name} 
                                         stroke={colors[idx % colors.length]} 
-                                        strokeWidth={2} 
+                                        strokeWidth={3} 
                                         fill={colors[idx % colors.length]} 
-                                        fillOpacity={0.1} 
+                                        fillOpacity={0.05} 
                                     />
                                 ))}
                             </RadarChart>

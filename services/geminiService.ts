@@ -72,43 +72,52 @@ export const generateSchoolReport = async (
 export const generateComparativeReport = async (datasets: Dataset[]): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-    // Prepare a summarized context for the AI to reduce token usage but keep signal
-    const summaryData = datasets.map(d => ({
-        name: d.name,
-        total: d.stats.total,
-        safety: d.stats.avgSafety,
-        mentalHealth: d.stats.avgMentalHealth,
-        violence: d.stats.violencePerc,
-        facilities: d.stats.avgFacilities,
-        sentimentBalance: `Pos: ${d.sentimentStats.positive}%, Neg: ${d.sentimentStats.negative}%`
+    // 1. Sort datasets chronologically (assuming name contains date or increasing sequence)
+    const sortedDatasets = [...datasets].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+    // 2. Prepare structured summary
+    const summaryData = sortedDatasets.map(d => ({
+        period: d.name,
+        metrics: {
+            safety: d.stats.avgSafety,
+            mental_health: d.stats.avgMentalHealth,
+            infrastructure: d.stats.avgFacilities,
+            violence_rate: d.stats.violencePerc
+        },
+        sentiment: {
+            positive_percent: d.sentimentStats.positive,
+            negative_percent: d.sentimentStats.negative
+        }
     }));
 
     const prompt = `
-    Atue como um Analista de Dados Educacionais Sênior. Estou fornecendo dados históricos de pesquisas de clima escolar de diferentes períodos (arquivos).
-    
-    DADOS COMPARATIVOS (Cronológicos):
+    Atue como um Cientista de Dados Educacionais especializado em Análise Longitudinal.
+    Estou fornecendo uma série temporal de dados de clima escolar para análise comparativa.
+
+    DADOS (Ordem Cronológica):
     ${JSON.stringify(summaryData, null, 2)}
 
     OBJETIVO:
-    Identificar TENDÊNCIAS, REGRESSÕES e PROGRESSOS entre os períodos analisados.
+    Identificar padrões de **Evolução**, **Regressão** e **Correlação** entre os períodos.
 
     ESTRUTURA DA RESPOSTA (MARKDOWN):
 
-    1. **Diagnóstico de Evolução**:
-       - O clima escolar melhorou ou piorou globalmente?
-       - Qual indicador teve a variação mais dramática (positiva ou negativa)?
-    
-    2. **Análise de Tendência (Tabela Markdown)**:
-       - Crie uma tabela comparando o primeiro e o último dataset.
-       - Colunas: | Indicador | Situação Inicial | Situação Atual | Variação | Análise Curta |
+    1. **Resumo da Trajetória**:
+       - Descreva a narrativa dos dados. Houve progresso sustentável ou flutuações?
+       - Destaque o "ponto de virada" (se houver). Ex: "A segurança melhorou consistentemente, mas a saúde mental colapsou no último período".
 
-    3. **Alertas de Regressão**:
-       - Identifique áreas onde houve piora. Se a violência aumentou ou a saúde mental caiu, destaque isso com urgência.
-    
-    4. **Recomendação de Rumo**:
-       - Baseado na trajetória (Trendline), o que deve ser feito no próximo ciclo?
+    2. **Tabela de Variação de Impacto (Markdown)**:
+       - Crie uma tabela comparando o Primeiro vs Último período.
+       - Colunas: | Indicador | Início | Fim | Delta | Interpretação (Melhorou/Piorou/Estável) |
 
-    Seja direto, data-driven e estratégico.
+    3. **Análise de Correlação e Causalidade**:
+       - Relacione métricas. Ex: "A queda na infraestrutura está correlacionada com o aumento da negatividade nos comentários?"
+       - Analise se a taxa de violência acompanha a percepção de segurança ou se há contradição.
+
+    4. **Recomendações de Longo Prazo**:
+       - Baseado na linha de tendência (trendline), o que deve ser priorizado para o próximo ciclo?
+
+    Seja direto, técnico e use insights baseados nos números.
     `;
 
     try {
