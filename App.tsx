@@ -577,16 +577,22 @@ const App: React.FC = () => {
             { name: 'Negativo', value: filteredReportSuggestions.filter(s => s.sentiment === 'Negativo').length, color: '#f87171' },
         ].filter(d => d.value > 0);
 
-        // Bar Chart Data (Role Sentiment Distribution) - only if no specific role filtered
-        const roleSentimentData = reportRoleFilter === 'Todos' ? [...new Set(suggestions.map(s => s.role))].map(role => {
-            const roleSug = suggestions.filter(s => s.role === role);
-            return {
-                name: role,
-                Positivo: roleSug.filter(s => s.sentiment === 'Positivo').length,
-                Neutro: roleSug.filter(s => s.sentiment === 'Neutro').length,
-                Negativo: roleSug.filter(s => s.sentiment === 'Negativo').length,
-            };
-        }) : [];
+        // Bar Chart Data (Role Sentiment Distribution) - Updated to handle both "Todos" and specific role
+        const roleSentimentData = useMemo(() => {
+            const rolesToProcess = reportRoleFilter === 'Todos' 
+                ? [...new Set(suggestions.map(s => s.role))] 
+                : [reportRoleFilter];
+            
+            return rolesToProcess.map(role => {
+                const roleSug = suggestions.filter(s => s.role === role);
+                return {
+                    name: role,
+                    Positivo: roleSug.filter(s => s.sentiment === 'Positivo').length,
+                    Neutro: roleSug.filter(s => s.sentiment === 'Neutro').length,
+                    Negativo: roleSug.filter(s => s.sentiment === 'Negativo').length,
+                };
+            });
+        }, [suggestions, reportRoleFilter]);
 
         // Trend Chart Data (Sentiment over time)
         const trendData = React.useMemo(() => {
@@ -675,39 +681,20 @@ const App: React.FC = () => {
 
                 {/* Visualizations Row */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Sentiment Pie Chart */}
+                    {/* Slot 1: Pie Chart OR Line Chart (Trend) */}
                     <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl lg:col-span-1">
-                        <h4 className="text-white font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider"><Activity size={18} className="text-purple-400" /> Distribuição Atual</h4>
-                        <div className="h-[200px] w-full flex items-center justify-center">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                                        {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />)}
-                                    </Pie>
-                                    <RechartsTooltip content={<DarkTooltip />} />
-                                    <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* Stacked Bar (Roles) or Trend Line */}
-                    <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl lg:col-span-2">
                         {reportRoleFilter === 'Todos' ? (
                             <>
-                                <h4 className="text-white font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider"><BarChart3 size={18} className="text-blue-400" /> Sentimento por Perfil</h4>
-                                <div className="h-[200px] w-full">
+                                <h4 className="text-white font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider"><Activity size={18} className="text-purple-400" /> Distribuição Atual</h4>
+                                <div className="h-[200px] w-full flex items-center justify-center">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={roleSentimentData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
-                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                                            <RechartsTooltip content={<DarkTooltip />} cursor={{fill: '#334155', opacity: 0.3}} />
-                                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                                            <Bar dataKey="Positivo" stackId="a" fill="#4ade80" radius={[0,0,4,4]} barSize={40} />
-                                            <Bar dataKey="Neutro" stackId="a" fill="#94a3b8" />
-                                            <Bar dataKey="Negativo" stackId="a" fill="#f87171" radius={[4,4,0,0]} />
-                                        </BarChart>
+                                        <PieChart>
+                                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                                {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />)}
+                                            </Pie>
+                                            <RechartsTooltip content={<DarkTooltip />} />
+                                            <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
+                                        </PieChart>
                                     </ResponsiveContainer>
                                 </div>
                             </>
@@ -730,6 +717,25 @@ const App: React.FC = () => {
                                 </div>
                             </>
                         )}
+                    </div>
+
+                    {/* Slot 2: Stacked Bar (Roles) */}
+                    <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl lg:col-span-2">
+                        <h4 className="text-white font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider"><BarChart3 size={18} className="text-blue-400" /> Sentimento por Perfil</h4>
+                        <div className="h-[200px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={roleSentimentData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                                    <RechartsTooltip content={<DarkTooltip />} cursor={{fill: '#334155', opacity: 0.3}} />
+                                    <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                                    <Bar dataKey="Positivo" stackId="a" fill="#4ade80" radius={[0,0,4,4]} barSize={40} />
+                                    <Bar dataKey="Neutro" stackId="a" fill="#94a3b8" />
+                                    <Bar dataKey="Negativo" stackId="a" fill="#f87171" radius={[4,4,0,0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
                 </div>
 
