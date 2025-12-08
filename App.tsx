@@ -6,7 +6,8 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, 
-    Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, LabelList
+    Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, LabelList,
+    PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { 
     Shield, School, MessageSquare, AlertTriangle, Upload, FileText, Heart, Activity, 
@@ -538,6 +539,20 @@ const App: React.FC = () => {
             document.body.removeChild(link);
         };
 
+        const sentimentCounts = { Positivo: 0, Neutro: 0, Negativo: 0 };
+        filteredReportSuggestions.forEach(s => {
+            if (s.sentiment in sentimentCounts) {
+                sentimentCounts[s.sentiment]++;
+            }
+        });
+
+        const totalFiltered = filteredReportSuggestions.length;
+        const pieData = [
+            { name: 'Positivo', value: sentimentCounts.Positivo, color: '#4ade80' },
+            { name: 'Neutro', value: sentimentCounts.Neutro, color: '#94a3b8' },
+            { name: 'Negativo', value: sentimentCounts.Negativo, color: '#f87171' }
+        ].filter(item => item.value > 0);
+
         return (
             <div className="animate-in space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -591,6 +606,45 @@ const App: React.FC = () => {
                             <div className="bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 font-mono text-sm shadow-inner min-w-[100px] text-center">Total: <span className="text-white font-bold">{filteredReportSuggestions.length}</span></div>
                         </div>
                     </div>
+
+                    {totalFiltered > 0 && (
+                        <div className="mb-6 p-4 bg-slate-900/30 rounded-xl border border-slate-700/50 flex flex-wrap items-center justify-center gap-8">
+                            <div className="h-32 w-32 relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={pieData}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={25}
+                                            outerRadius={50}
+                                            paddingAngle={2}
+                                            dataKey="value"
+                                            stroke="none"
+                                        >
+                                            {pieData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                            ))}
+                                        </Pie>
+                                        <RechartsTooltip content={<DarkTooltip />} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="flex gap-6">
+                                {pieData.map(entry => (
+                                    <div key={entry.name} className="flex flex-col items-center">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                                            {entry.name}
+                                        </span>
+                                        <span className="text-xl font-black text-white">{entry.value}</span>
+                                        <span className="text-xs text-slate-500 font-mono">({((entry.value / totalFiltered) * 100).toFixed(1)}%)</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/50">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm text-slate-400">
