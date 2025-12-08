@@ -691,7 +691,14 @@ const App: React.FC = () => {
                                 <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider"><tr><th className="px-6 py-5 border-b border-slate-800">Role</th><th className="px-6 py-5 border-b border-slate-800">Sentimento</th><th className="px-6 py-5 border-b border-slate-800">Feedback</th></tr></thead>
                                 <tbody className="divide-y divide-slate-800">
                                     {filteredReportSuggestions.length > 0 ? (filteredReportSuggestions.map((sug) => (
-                                        <tr key={sug.id} className="hover:bg-slate-800/50 transition-colors group">
+                                        <tr 
+                                            key={sug.id} 
+                                            className={`transition-colors group ${
+                                                sug.sentiment === 'Negativo' 
+                                                ? 'bg-red-500/10 hover:bg-red-500/20 border-l-[3px] border-l-red-500' 
+                                                : 'hover:bg-slate-800/50 border-l-[3px] border-l-transparent'
+                                            }`}
+                                        >
                                             <td className="px-6 py-5 w-48 align-top"><span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border ${sug.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : sug.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{sug.role}</span></td>
                                             <td className="px-6 py-5 w-32"><span className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold border ${sug.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : sug.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{sug.sentiment}</span></td>
                                             <td className="px-6 py-5 text-slate-300 leading-relaxed group-hover:text-white transition-colors">{sug.text}</td>
