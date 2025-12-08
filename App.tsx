@@ -12,7 +12,7 @@ import {
 import { 
     Shield, School, MessageSquare, AlertTriangle, Upload, FileText, Heart, Activity, 
     CheckCircle, Sparkles, BrainCircuit, FileDown, Loader2, Calculator, Settings,
-    Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet
+    Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet, BarChart3
 } from 'lucide-react';
 
 import { Sidebar, KpiCard, SuggestionCard, DarkTooltip, MarkdownRenderers } from './components/Components';
@@ -553,6 +553,22 @@ const App: React.FC = () => {
             { name: 'Negativo', value: sentimentCounts.Negativo, color: '#f87171' }
         ].filter(item => item.value > 0);
 
+        // Prepare Data for Stacked Bar Chart (Role vs Sentiment)
+        // Note: Using global 'suggestions' to show the full landscape, or could use filtered if desired.
+        // Usually breakdown charts show the whole picture. Let's exclude 'Todos'.
+        const roleSentimentData = uniqueRoles.filter(r => r !== 'Todos').map(role => {
+            const roleSuggestions = suggestions.filter(s => s.role === role);
+            const positive = roleSuggestions.filter(s => s.sentiment === 'Positivo').length;
+            const neutral = roleSuggestions.filter(s => s.sentiment === 'Neutro').length;
+            const negative = roleSuggestions.filter(s => s.sentiment === 'Negativo').length;
+            return {
+                name: role,
+                Positivo: positive,
+                Neutro: neutral,
+                Negativo: negative
+            };
+        });
+
         return (
             <div className="animate-in space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -606,6 +622,30 @@ const App: React.FC = () => {
                             <div className="bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 font-mono text-sm shadow-inner min-w-[100px] text-center">Total: <span className="text-white font-bold">{filteredReportSuggestions.length}</span></div>
                         </div>
                     </div>
+                    
+                    {/* NEW STACKED BAR CHART SECTION */}
+                    {roleSentimentData.length > 0 && (
+                        <div className="bg-[#0f172a]/50 p-6 rounded-2xl border border-slate-800 mb-8">
+                            <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
+                                <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400"><BarChart3 size={18}/></div>
+                                Distribuição de Sentimentos por Perfil
+                            </h3>
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={roleSentimentData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                                        <XAxis dataKey="name" tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                                        <RechartsTooltip content={<DarkTooltip />} cursor={{fill: '#334155', opacity: 0.3}} />
+                                        <Legend wrapperStyle={{paddingTop: '20px'}} />
+                                        <Bar dataKey="Positivo" stackId="a" fill="#4ade80" radius={[0, 0, 4, 4]} />
+                                        <Bar dataKey="Neutro" stackId="a" fill="#94a3b8" radius={[0, 0, 0, 0]} />
+                                        <Bar dataKey="Negativo" stackId="a" fill="#f87171" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
 
                     {totalFiltered > 0 && (
                         <div className="mb-6 p-4 bg-slate-900/30 rounded-xl border border-slate-700/50 flex flex-wrap items-center justify-center gap-8">
