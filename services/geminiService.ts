@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { Stats, SentimentStats, Suggestion } from '../types';
+import { Stats, SentimentStats, Suggestion, Dataset } from '../types';
 
 export const generateSchoolReport = async (
     stats: Stats, 
@@ -65,6 +65,61 @@ export const generateSchoolReport = async (
         return text;
     } catch (error) {
         console.error("Gemini API Error:", error);
+        throw error;
+    }
+};
+
+export const generateComparativeReport = async (datasets: Dataset[]): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    // Prepare a summarized context for the AI to reduce token usage but keep signal
+    const summaryData = datasets.map(d => ({
+        name: d.name,
+        total: d.stats.total,
+        safety: d.stats.avgSafety,
+        mentalHealth: d.stats.avgMentalHealth,
+        violence: d.stats.violencePerc,
+        facilities: d.stats.avgFacilities,
+        sentimentBalance: `Pos: ${d.sentimentStats.positive}%, Neg: ${d.sentimentStats.negative}%`
+    }));
+
+    const prompt = `
+    Atue como um Analista de Dados Educacionais Sênior. Estou fornecendo dados históricos de pesquisas de clima escolar de diferentes períodos (arquivos).
+    
+    DADOS COMPARATIVOS (Cronológicos):
+    ${JSON.stringify(summaryData, null, 2)}
+
+    OBJETIVO:
+    Identificar TENDÊNCIAS, REGRESSÕES e PROGRESSOS entre os períodos analisados.
+
+    ESTRUTURA DA RESPOSTA (MARKDOWN):
+
+    1. **Diagnóstico de Evolução**:
+       - O clima escolar melhorou ou piorou globalmente?
+       - Qual indicador teve a variação mais dramática (positiva ou negativa)?
+    
+    2. **Análise de Tendência (Tabela Markdown)**:
+       - Crie uma tabela comparando o primeiro e o último dataset.
+       - Colunas: | Indicador | Situação Inicial | Situação Atual | Variação | Análise Curta |
+
+    3. **Alertas de Regressão**:
+       - Identifique áreas onde houve piora. Se a violência aumentou ou a saúde mental caiu, destaque isso com urgência.
+    
+    4. **Recomendação de Rumo**:
+       - Baseado na trajetória (Trendline), o que deve ser feito no próximo ciclo?
+
+    Seja direto, data-driven e estratégico.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+
+        return response.text || "Não foi possível gerar a análise comparativa.";
+    } catch (error) {
+        console.error("Comparative AI Error:", error);
         throw error;
     }
 };
