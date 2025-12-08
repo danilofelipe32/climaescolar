@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -10,7 +11,7 @@ import {
 import { 
     Shield, School, MessageSquare, AlertTriangle, Upload, FileText, Heart, Activity, 
     CheckCircle, Sparkles, BrainCircuit, FileDown, Loader2, Calculator, Settings,
-    Smile, Meh, Frown
+    Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet
 } from 'lucide-react';
 
 import { Sidebar, KpiCard, SuggestionCard, DarkTooltip, MarkdownRenderers } from './components/Components';
@@ -64,6 +65,8 @@ const App: React.FC = () => {
     const [data, setData] = useState<SurveyData[]>([]);
     const [activeTab, setActiveTab] = useState('dashboard');
     const [filter, setFilter] = useState('Todos');
+    const [reportRoleFilter, setReportRoleFilter] = useState('Todos');
+    const [reportSentimentFilter, setReportSentimentFilter] = useState('Todos');
     
     // AI State
     const [analysis, setAnalysis] = useState(REPORT_AI_ANALYSIS);
@@ -277,134 +280,212 @@ const App: React.FC = () => {
 
     // --- VIEW SUB-COMPONENTS ---
     
-    const DashboardView = () => (
-        <div className="animate-in space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <KpiCard title="Segurança" value={`${stats.avgSafety}`} subValue="/ 5.0 Escala" gradient="linear-gradient(to right, #3b82f6, #06b6d4)" icon={Shield} />
-                <KpiCard title="Infraestrutura" value={`${stats.avgFacilities}`} subValue="Ponto Crítico" gradient="linear-gradient(to right, #f97316, #ef4444)" icon={School} />
-                <KpiCard title="Bem-Estar" value={`${stats.avgMentalHealth}`} subValue="Saúde Mental" gradient="linear-gradient(to right, #8b5cf6, #ec4899)" icon={Heart} />
-                <KpiCard title="Violência" value={`${stats.violencePerc}%`} subValue="Taxa de Relatos" gradient="linear-gradient(to right, #ef4444, #b91c1c)" icon={AlertTriangle} />
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1 bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl flex flex-col">
-                    <h3 className="text-white font-bold mb-6 flex items-center gap-3"><div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><Activity size={20}/></div>Diagnóstico</h3>
-                    <div className="flex-1 w-full min-h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <RadarChart cx="50%" cy="50%" outerRadius="75%" data={chartData.radar}>
-                                <PolarGrid stroke="#334155" strokeDasharray="3 3" />
-                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 600 }} />
-                                <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
-                                <Radar name="Média" dataKey="A" stroke="#22d3ee" strokeWidth={3} fill="#06b6d4" fillOpacity={0.3} />
-                                <RechartsTooltip content={<DarkTooltip />} />
-                            </RadarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-                <div className="lg:col-span-2 bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl flex flex-col">
-                    <h3 className="text-white font-bold mb-6 flex items-center gap-3"><div className="p-2 bg-green-500/10 rounded-lg text-green-400"><CheckCircle size={20}/></div>Segurança por Perfil</h3>
-                    <div className="flex-1 w-full min-h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData.safety} layout="vertical" margin={{ left: 20, right: 20 }}>
-                                <defs>
-                                    <linearGradient id="gradBar" x1="0" y1="0" x2="1" y2="0">
-                                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.6}/>
-                                        <stop offset="100%" stopColor="#34d399" stopOpacity={1}/>
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#334155" />
-                                <XAxis type="number" domain={[0, 5]} tick={{fill: '#64748b'}} axisLine={false} tickLine={false} />
-                                <YAxis type="category" dataKey="name" tick={{fill: '#f8fafc', fontWeight: 500}} width={100} axisLine={false} tickLine={false} />
-                                <RechartsTooltip content={<DarkTooltip />} cursor={{fill: '#334155', opacity: 0.3}} />
-                                <Bar dataKey="Segurança" fill="url(#gradBar)" radius={[0, 4, 4, 0]} barSize={32}>
-                                    <LabelList dataKey="Segurança" position="right" fill="#fff" fontWeight="bold" />
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
+    const DashboardView = () => {
+        // Logic for Radar Explanations
+        const criticalAreas = chartData.radar.filter(r => Number(r.A) < 2.5).map(r => r.subject);
+        const strongAreas = chartData.radar.filter(r => Number(r.A) >= 4.0).map(r => r.subject);
+        const maxRadar = chartData.radar.reduce((prev, current) => (Number(prev.A) > Number(current.A)) ? prev : current, chartData.radar[0] || { subject: '-', A: 0 });
+        
+        let radarText = "";
+        if (criticalAreas.length > 0) {
+            radarText = `Atenção prioritária necessária em **${criticalAreas.join(', ')}**, com índices críticos (< 2.5). ${strongAreas.length > 0 ? `Em contrapartida, **${strongAreas.join(', ')}** sustentam os pontos positivos.` : ''}`;
+        } else if (strongAreas.length > 0) {
+            radarText = `O clima escolar demonstra solidez, impulsionado por altos índices em **${strongAreas.join(', ')}**. O foco deve ser a manutenção e expansão dessas práticas.`;
+        } else {
+            radarText = `Cenário de equilíbrio moderado. **${maxRadar.subject}** lidera, mas há margem para melhorias generalizadas em todos os indicadores.`;
+        }
+        
+        // Logic for Safety Bar Explanations
+        const sortedSafety = [...chartData.safety].sort((a,b) => b.Segurança - a.Segurança);
+        const maxSafety = sortedSafety[0] || { name: '-', Segurança: 0 };
+        const minSafety = sortedSafety[sortedSafety.length - 1] || { name: '-', Segurança: 0 };
+        const safetyGap = (maxSafety.Segurança - minSafety.Segurança).toFixed(1);
+        
+        let safetyText = "";
+        if (parseFloat(safetyGap) > 1.5) {
+            safetyText = `Disparidade alarmante de **${safetyGap} pontos** entre grupos. Enquanto **${maxSafety.name}** percebe o ambiente seguro, **${minSafety.name}** sente-se vulnerável, indicando falhas graves na equidade da proteção.`;
+        } else if (parseFloat(safetyGap) > 0.5) {
+            safetyText = `Variação perceptível na sensação de segurança. **${minSafety.name}** relata índices inferiores a **${maxSafety.name}**, sugerindo a necessidade de ações de acolhimento específicas.`;
+        } else {
+            safetyText = `A percepção de segurança é **homogênea** (variação de apenas ${safetyGap}), indicando que as políticas de convivência e proteção impactam a todos os grupos de forma similar.`;
+        }
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="col-span-12 lg:col-span-1 bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl relative overflow-hidden flex flex-col max-h-[600px]">
-                    <div className="absolute top-0 right-0 w-80 h-80 bg-purple-600/20 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-                    <div className="flex justify-between items-center mb-6 relative z-10 shrink-0">
-                        <h3 className="text-2xl font-bold text-white flex items-center gap-3">
-                            <BrainCircuit size={24} className="text-purple-400" /> 
-                            <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">Analista IA</span>
-                        </h3>
-                        <div className="px-3 py-1 bg-white/5 rounded-full border border-white/10 text-[10px] text-slate-400 font-mono">
-                            Base: {suggestions.length} comentários
+        // Logic for Sentiment Explanations
+        let predominantSentiment = 'Neutro';
+        let predominantPercent = sentimentStats.neutral;
+        let sentimentColor = 'text-slate-400';
+        let sentimentContext = "";
+        
+        if (sentimentStats.positive > sentimentStats.neutral && sentimentStats.positive > sentimentStats.negative) {
+             predominantSentiment = 'Positivo';
+             predominantPercent = sentimentStats.positive;
+             sentimentColor = 'text-green-400';
+             sentimentContext = "O otimismo da comunidade valida as estratégias atuais, criando um ambiente propício ao engajamento.";
+        } else if (sentimentStats.negative > sentimentStats.neutral && sentimentStats.negative > sentimentStats.positive) {
+             predominantSentiment = 'Negativo';
+             predominantPercent = sentimentStats.negative;
+             sentimentColor = 'text-red-400';
+             sentimentContext = "O alto volume de críticas sinaliza desconforto generalizado. É crucial investigar as causas raiz nos comentários.";
+        } else {
+             sentimentContext = "A polarização ou neutralidade indica um momento de incerteza. Ações de comunicação transparente podem ser decisivas.";
+        }
+
+        return (
+            <div className="animate-in space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <KpiCard title="Segurança" value={`${stats.avgSafety}`} subValue="/ 5.0 Escala" gradient="linear-gradient(to right, #3b82f6, #06b6d4)" icon={Shield} />
+                    <KpiCard title="Infraestrutura" value={`${stats.avgFacilities}`} subValue="Ponto Crítico" gradient="linear-gradient(to right, #f97316, #ef4444)" icon={School} />
+                    <KpiCard title="Bem-Estar" value={`${stats.avgMentalHealth}`} subValue="Saúde Mental" gradient="linear-gradient(to right, #8b5cf6, #ec4899)" icon={Heart} />
+                    <KpiCard title="Violência" value={`${stats.violencePerc}%`} subValue="Taxa de Relatos" gradient="linear-gradient(to right, #ef4444, #b91c1c)" icon={AlertTriangle} />
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-1 bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl flex flex-col">
+                        <h3 className="text-white font-bold mb-6 flex items-center gap-3"><div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><Activity size={20}/></div>Diagnóstico</h3>
+                        <div className="flex-1 w-full min-h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RadarChart cx="50%" cy="50%" outerRadius="75%" data={chartData.radar}>
+                                    <PolarGrid stroke="#334155" strokeDasharray="3 3" />
+                                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 600 }} />
+                                    <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                                    <Radar name="Média" dataKey="A" stroke="#22d3ee" strokeWidth={3} fill="#06b6d4" fillOpacity={0.3} />
+                                    <RechartsTooltip content={<DarkTooltip />} />
+                                </RadarChart>
+                            </ResponsiveContainer>
                         </div>
-                        {!loadingAI && (
-                            <button onClick={() => handleGenerateAnalysis()} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-purple-900/50 active:scale-95 transition-all">
-                                <Sparkles size={16} /> Re-Gerar
-                            </button>
+                        <div className="mt-4 pt-4 border-t border-slate-800">
+                             <p className="text-xs text-slate-400 leading-relaxed flex gap-2">
+                                <Info size={14} className="text-blue-400 shrink-0 mt-0.5" />
+                                <span>
+                                    <ReactMarkdown components={{strong: ({node, ...props}) => <strong className="text-blue-300 font-bold" {...props}/>}}>
+                                        {radarText}
+                                    </ReactMarkdown>
+                                </span>
+                             </p>
+                        </div>
+                    </div>
+                    <div className="lg:col-span-2 bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl flex flex-col">
+                        <h3 className="text-white font-bold mb-6 flex items-center gap-3"><div className="p-2 bg-green-500/10 rounded-lg text-green-400"><CheckCircle size={20}/></div>Segurança por Perfil</h3>
+                        <div className="flex-1 w-full min-h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={chartData.safety} layout="vertical" margin={{ left: 20, right: 20 }}>
+                                    <defs>
+                                        <linearGradient id="gradBar" x1="0" y1="0" x2="1" y2="0">
+                                            <stop offset="0%" stopColor="#10b981" stopOpacity={0.6}/>
+                                            <stop offset="100%" stopColor="#34d399" stopOpacity={1}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#334155" />
+                                    <XAxis type="number" domain={[0, 5]} tick={{fill: '#64748b'}} axisLine={false} tickLine={false} />
+                                    <YAxis type="category" dataKey="name" tick={{fill: '#f8fafc', fontWeight: 500}} width={100} axisLine={false} tickLine={false} />
+                                    <RechartsTooltip content={<DarkTooltip />} cursor={{fill: '#334155', opacity: 0.3}} />
+                                    <Bar dataKey="Segurança" fill="url(#gradBar)" radius={[0, 4, 4, 0]} barSize={32}>
+                                        <LabelList dataKey="Segurança" position="right" fill="#fff" fontWeight="bold" />
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-slate-800">
+                             <p className="text-xs text-slate-400 leading-relaxed flex gap-2">
+                                <Info size={14} className="text-green-400 shrink-0 mt-0.5" />
+                                <span>
+                                    <ReactMarkdown components={{strong: ({node, ...props}) => <strong className="text-green-300 font-bold" {...props}/>}}>
+                                        {safetyText}
+                                    </ReactMarkdown>
+                                </span>
+                             </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="col-span-12 lg:col-span-1 bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl relative overflow-hidden flex flex-col max-h-[600px]">
+                        <div className="absolute top-0 right-0 w-80 h-80 bg-purple-600/20 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                        <div className="flex justify-between items-center mb-6 relative z-10 shrink-0">
+                            <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                                <BrainCircuit size={24} className="text-purple-400" /> 
+                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">Analista IA</span>
+                            </h3>
+                            <div className="px-3 py-1 bg-white/5 rounded-full border border-white/10 text-[10px] text-slate-400 font-mono">
+                                Base: {suggestions.length} comentários
+                            </div>
+                            {!loadingAI && (
+                                <button onClick={() => handleGenerateAnalysis()} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-purple-900/50 active:scale-95 transition-all">
+                                    <Sparkles size={16} /> Re-Gerar
+                                </button>
+                            )}
+                        </div>
+                        
+                        {loadingAI && <div className="flex flex-col items-center justify-center py-12 shrink-0"><Loader2 size={40} className="text-purple-500 animate-spin mb-4" /><span className="text-purple-300 animate-pulse">Processando inteligência...</span></div>}
+                        {errorAI && <div className="p-4 bg-red-900/20 border border-red-800 text-red-400 rounded-xl text-sm mb-4">{errorAI}</div>}
+
+                        {analysis && (
+                            <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/20 p-6 rounded-2xl border border-white/5 shadow-inner">
+                                <ReactMarkdown 
+                                    remarkPlugins={[remarkGfm]} 
+                                    components={MarkdownRenderers}
+                                >
+                                    {analysis}
+                                </ReactMarkdown>
+                            </div>
                         )}
                     </div>
                     
-                    {loadingAI && <div className="flex flex-col items-center justify-center py-12 shrink-0"><Loader2 size={40} className="text-purple-500 animate-spin mb-4" /><span className="text-purple-300 animate-pulse">Processando inteligência...</span></div>}
-                    {errorAI && <div className="p-4 bg-red-900/20 border border-red-800 text-red-400 rounded-xl text-sm mb-4">{errorAI}</div>}
-
-                    {analysis && (
-                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/20 p-6 rounded-2xl border border-white/5 shadow-inner">
-                            <ReactMarkdown 
-                                remarkPlugins={[remarkGfm]} 
-                                components={MarkdownRenderers}
-                            >
-                                {analysis}
-                            </ReactMarkdown>
+                    <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl flex flex-col max-h-[600px]">
+                        <div className="flex justify-between items-center mb-6 shrink-0">
+                            <h3 className="text-white font-bold flex items-center gap-3"><div className="p-2 bg-pink-500/10 rounded-lg text-pink-400"><MessageSquare size={20}/></div>Voz da Comunidade</h3>
+                            
+                            <div className="flex gap-2 bg-slate-900 p-1 rounded-xl">
+                                {['Todos', 'Positivo', 'Neutro', 'Negativo'].map(type => (
+                                    <button 
+                                        key={type}
+                                        onClick={() => setFilter(type)}
+                                        className={`px-3 py-1 text-xs rounded-lg font-bold transition-all flex items-center gap-1 ${
+                                            filter === type 
+                                            ? type === 'Positivo' ? 'bg-green-500 text-white' 
+                                            : type === 'Negativo' ? 'bg-red-500 text-white'
+                                            : type === 'Neutro' ? 'bg-slate-500 text-white'
+                                            : 'bg-white text-slate-900'
+                                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        {type}
+                                        <span className="opacity-70 text-[10px] ml-0.5">({getFilterCount(type)})</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    )}
-                </div>
-                
-                <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl flex flex-col max-h-[600px]">
-                    <div className="flex justify-between items-center mb-6 shrink-0">
-                        <h3 className="text-white font-bold flex items-center gap-3"><div className="p-2 bg-pink-500/10 rounded-lg text-pink-400"><MessageSquare size={20}/></div>Voz da Comunidade</h3>
                         
-                        <div className="flex gap-2 bg-slate-900 p-1 rounded-xl">
-                            {['Todos', 'Positivo', 'Neutro', 'Negativo'].map(type => (
-                                <button 
-                                    key={type}
-                                    onClick={() => setFilter(type)}
-                                    className={`px-3 py-1 text-xs rounded-lg font-bold transition-all flex items-center gap-1 ${
-                                        filter === type 
-                                        ? type === 'Positivo' ? 'bg-green-500 text-white' 
-                                        : type === 'Negativo' ? 'bg-red-500 text-white'
-                                        : type === 'Neutro' ? 'bg-slate-500 text-white'
-                                        : 'bg-white text-slate-900'
-                                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                                    }`}
-                                >
-                                    {type}
-                                    <span className="opacity-70 text-[10px] ml-0.5">({getFilterCount(type)})</span>
-                                </button>
-                            ))}
+                        <div className="w-full h-2 bg-slate-800 rounded-full mb-3 flex overflow-hidden shrink-0">
+                            <div style={{ width: `${sentimentStats.positive}%` }} className="h-full bg-green-500"></div>
+                            <div style={{ width: `${sentimentStats.neutral}%` }} className="h-full bg-slate-500"></div>
+                            <div style={{ width: `${sentimentStats.negative}%` }} className="h-full bg-red-500"></div>
                         </div>
-                    </div>
-                    
-                    <div className="w-full h-2 bg-slate-800 rounded-full mb-4 flex overflow-hidden shrink-0">
-                        <div style={{ width: `${sentimentStats.positive}%` }} className="h-full bg-green-500"></div>
-                        <div style={{ width: `${sentimentStats.neutral}%` }} className="h-full bg-slate-500"></div>
-                        <div style={{ width: `${sentimentStats.negative}%` }} className="h-full bg-red-500"></div>
-                    </div>
+                        
+                        <div className="mb-4 flex items-start gap-2 text-xs text-slate-400 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                            <Info size={14} className={`shrink-0 mt-0.5 ${sentimentColor}`} />
+                            <span>
+                                Tendência majoritariamente <strong className={sentimentColor}>{predominantSentiment}</strong> ({predominantPercent}%). {sentimentContext}
+                            </span>
+                        </div>
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                        <div className="space-y-4">
-                            {filteredSuggestions.map((sug) => (
-                                <SuggestionCard key={sug.id} sug={sug} />
-                            ))}
-                            {filteredSuggestions.length === 0 && (
-                                <div className="text-center py-10 text-slate-500 text-sm">
-                                    Nenhum comentário encontrado neste filtro.
-                                </div>
-                            )}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                            <div className="space-y-4">
+                                {filteredSuggestions.map((sug) => (
+                                    <SuggestionCard key={sug.id} sug={sug} />
+                                ))}
+                                {filteredSuggestions.length === 0 && (
+                                    <div className="text-center py-10 text-slate-500 text-sm">
+                                        Nenhum comentário encontrado neste filtro.
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     const AdvancedStatsView = () => (
         <div className="animate-in space-y-8">
@@ -430,34 +511,106 @@ const App: React.FC = () => {
         </div>
     );
 
-    const ReportsView = () => (
-        <div className="animate-in space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="p-6 rounded-2xl bg-green-900/20 border border-green-800 flex items-center justify-between"><div><p className="text-green-400 text-xs font-bold uppercase tracking-widest">Positivos</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.positive}%</h4><p className="text-slate-400 text-xs mt-1">{sentimentStats.counts.Positivo} comentários</p></div><div className="p-3 rounded-xl bg-green-500/20 text-green-400"><Smile size={24}/></div></div>
-                <div className="p-6 rounded-2xl bg-slate-800/50 border border-slate-700 flex items-center justify-between"><div><p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Neutros</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.neutral}%</h4><p className="text-slate-500 text-xs mt-1">{sentimentStats.counts.Neutro} comentários</p></div><div className="p-3 rounded-xl bg-slate-700/50 text-slate-400"><Meh size={24}/></div></div>
-                <div className="p-6 rounded-2xl bg-red-900/20 border border-red-800 flex items-center justify-between"><div><p className="text-red-400 text-xs font-bold uppercase tracking-widest">Negativos</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.negative}%</h4><p className="text-slate-400 text-xs mt-1">{sentimentStats.counts.Negativo} comentários</p></div><div className="p-3 rounded-xl bg-red-500/20 text-red-400"><Frown size={24}/></div></div>
-            </div>
-            <div className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-xl">
-                <div className="flex justify-between items-center mb-8"><div><h2 className="text-3xl font-bold text-white flex items-center gap-3"><FileText size={32} className="text-cyan-400" /> Relatório Detalhado</h2></div><div className="bg-slate-900 px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 font-mono text-sm shadow-inner">Total: <span className="text-white font-bold">{suggestions.length}</span></div></div>
-                <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/50">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm text-slate-400">
-                            <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider"><tr><th className="px-6 py-5 border-b border-slate-800">Role</th><th className="px-6 py-5 border-b border-slate-800">Sentimento</th><th className="px-6 py-5 border-b border-slate-800">Feedback</th></tr></thead>
-                            <tbody className="divide-y divide-slate-800">
-                                {suggestions.length > 0 ? (suggestions.map((sug) => (
-                                    <tr key={sug.id} className="hover:bg-slate-800/50 transition-colors group">
-                                        <td className="px-6 py-5 w-48 align-top"><span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border ${sug.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : sug.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{sug.role}</span></td>
-                                        <td className="px-6 py-5 w-32"><span className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold border ${sug.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : sug.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{sug.sentiment}</span></td>
-                                        <td className="px-6 py-5 text-slate-300 leading-relaxed group-hover:text-white transition-colors">{sug.text}</td>
-                                    </tr>
-                                ))) : (<tr><td colSpan={3} className="px-6 py-12 text-center text-slate-600 italic">Nenhum dado disponível.</td></tr>)}
-                            </tbody>
-                        </table>
+    const ReportsView = () => {
+        const uniqueRoles = ['Todos', ...Array.from(new Set(suggestions.map(s => s.role))).sort()];
+        const filteredReportSuggestions = suggestions.filter(s => 
+            (reportRoleFilter === 'Todos' || s.role === reportRoleFilter) &&
+            (reportSentimentFilter === 'Todos' || s.sentiment === reportSentimentFilter)
+        );
+
+        const handleExportCSV = () => {
+            const headers = ['Role', 'Sentimento', 'Feedback'];
+            const csvContent = [
+                headers.join(','),
+                ...filteredReportSuggestions.map(s => {
+                    const cleanText = s.text.replace(/"/g, '""'); // Escape double quotes within content
+                    return `"${s.role}","${s.sentiment}","${cleanText}"`;
+                })
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `relatorio_filtrado_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        return (
+            <div className="animate-in space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div className="p-6 rounded-2xl bg-green-900/20 border border-green-800 flex items-center justify-between"><div><p className="text-green-400 text-xs font-bold uppercase tracking-widest">Positivos</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.positive}%</h4><p className="text-slate-400 text-xs mt-1">{sentimentStats.counts.Positivo} comentários</p></div><div className="p-3 rounded-xl bg-green-500/20 text-green-400"><Smile size={24}/></div></div>
+                    <div className="p-6 rounded-2xl bg-slate-800/50 border border-slate-700 flex items-center justify-between"><div><p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Neutros</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.neutral}%</h4><p className="text-slate-500 text-xs mt-1">{sentimentStats.counts.Neutro} comentários</p></div><div className="p-3 rounded-xl bg-slate-700/50 text-slate-400"><Meh size={24}/></div></div>
+                    <div className="p-6 rounded-2xl bg-red-900/20 border border-red-800 flex items-center justify-between"><div><p className="text-red-400 text-xs font-bold uppercase tracking-widest">Negativos</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.negative}%</h4><p className="text-slate-400 text-xs mt-1">{sentimentStats.counts.Negativo} comentários</p></div><div className="p-3 rounded-xl bg-red-500/20 text-red-400"><Frown size={24}/></div></div>
+                </div>
+                <div className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-xl">
+                    <div className="flex flex-col xl:flex-row justify-between items-center mb-8 gap-4">
+                        <div><h2 className="text-3xl font-bold text-white flex items-center gap-3"><FileText size={32} className="text-cyan-400" /> Relatório Detalhado</h2></div>
+                        <div className="flex flex-wrap items-center gap-3 justify-end">
+                            {/* Role Filter */}
+                            <div className="relative">
+                                <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <select 
+                                    value={reportRoleFilter}
+                                    onChange={(e) => setReportRoleFilter(e.target.value)}
+                                    className="pl-10 pr-8 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-slate-300 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none appearance-none cursor-pointer hover:bg-slate-800 transition-colors w-40"
+                                >
+                                    {uniqueRoles.map(role => (
+                                        <option key={role} value={role}>{role}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                            </div>
+
+                            {/* Sentiment Filter */}
+                            <div className="relative">
+                                <Activity size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <select 
+                                    value={reportSentimentFilter}
+                                    onChange={(e) => setReportSentimentFilter(e.target.value)}
+                                    className="pl-10 pr-8 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-slate-300 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none appearance-none cursor-pointer hover:bg-slate-800 transition-colors w-40"
+                                >
+                                    <option value="Todos">Todos (Sent)</option>
+                                    <option value="Positivo">Positivo</option>
+                                    <option value="Neutro">Neutro</option>
+                                    <option value="Negativo">Negativo</option>
+                                </select>
+                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                            </div>
+
+                            {/* Export CSV Button */}
+                             <button 
+                                onClick={handleExportCSV} 
+                                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl border border-slate-700 font-bold text-sm transition-all shadow hover:shadow-cyan-500/10"
+                            >
+                                <FileSpreadsheet size={16} /> <span className="hidden sm:inline">CSV</span>
+                            </button>
+
+                            <div className="bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 font-mono text-sm shadow-inner min-w-[100px] text-center">Total: <span className="text-white font-bold">{filteredReportSuggestions.length}</span></div>
+                        </div>
+                    </div>
+                    <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/50">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-slate-400">
+                                <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider"><tr><th className="px-6 py-5 border-b border-slate-800">Role</th><th className="px-6 py-5 border-b border-slate-800">Sentimento</th><th className="px-6 py-5 border-b border-slate-800">Feedback</th></tr></thead>
+                                <tbody className="divide-y divide-slate-800">
+                                    {filteredReportSuggestions.length > 0 ? (filteredReportSuggestions.map((sug) => (
+                                        <tr key={sug.id} className="hover:bg-slate-800/50 transition-colors group">
+                                            <td className="px-6 py-5 w-48 align-top"><span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border ${sug.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : sug.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{sug.role}</span></td>
+                                            <td className="px-6 py-5 w-32"><span className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold border ${sug.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : sug.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{sug.sentiment}</span></td>
+                                            <td className="px-6 py-5 text-slate-300 leading-relaxed group-hover:text-white transition-colors">{sug.text}</td>
+                                        </tr>
+                                    ))) : (<tr><td colSpan={3} className="px-6 py-12 text-center text-slate-600 italic">Nenhum dado disponível.</td></tr>)}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     const SettingsView = () => (
         <div className="animate-in max-w-3xl mx-auto mt-10">

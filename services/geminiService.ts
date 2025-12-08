@@ -7,14 +7,8 @@ export const generateSchoolReport = async (
     sentimentStats: SentimentStats
 ): Promise<string> => {
     
-    // NOTE: In Vercel, this must be set in the project settings environment variables
-    const apiKey = process.env.API_KEY;
-
-    if (!apiKey) {
-        throw new Error("API Key not configured in environment variables.");
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    // API Key must be obtained exclusively from process.env.API_KEY
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const prompt = `
     Atue como um Consultor Especialista em Clima Escolar e Psicologia Educacional.
