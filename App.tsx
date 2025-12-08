@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { jsPDF } from 'jspdf';
@@ -50,7 +50,7 @@ const REPORT_AI_ANALYSIS = `
 
 > O clima escolar encontra-se em um estado de **vulnerabilidade crítica**. A percepção de segurança não condiz com os indicadores de violência.
 
-## 🚩 Matriz de Risco
+## 🚩 Pontos Críticos
 
 | Área Crítica | Score | Impacto Identificado |
 | :--- | :---: | :--- |
@@ -275,6 +275,25 @@ const App: React.FC = () => {
         
         doc.save("Relatorio_Completo_ABNT.pdf");
         setGeneratingPdf(false);
+    };
+
+    const handleExportCSV = () => {
+        const filtered = suggestions.filter(s => 
+            (reportRoleFilter === 'Todos' || s.role === reportRoleFilter) &&
+            (reportSentimentFilter === 'Todos' || s.sentiment === reportSentimentFilter)
+        );
+        
+        const csvContent = "data:text/csv;charset=utf-8," 
+            + "ID,Role,Sentimento,Data,Feedback\n"
+            + filtered.map(e => `${e.id},"${e.role}",${e.sentiment},${e.timestamp || ''},"${e.text.replace(/"/g, '""')}"`).join("\n");
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "sugestoes_filtradas.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const filteredSuggestions = suggestions.filter(s => filter === 'Todos' || s.sentiment === filter);
@@ -517,418 +536,341 @@ const App: React.FC = () => {
     );
 
     const ReportsView = () => {
+        const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
         const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
-        const [sortConfig, setSortConfig] = useState<{ key: keyof Suggestion | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
-        
-        const uniqueRoles = ['Todos', ...Array.from(new Set(suggestions.map(s => s.role))).sort()];
+
+        // Filter suggestions first
         const filteredReportSuggestions = suggestions.filter(s => 
             (reportRoleFilter === 'Todos' || s.role === reportRoleFilter) &&
             (reportSentimentFilter === 'Todos' || s.sentiment === reportSentimentFilter)
         );
 
-        // Sorting Logic
+        // Sort suggestions
         const sortedSuggestions = React.useMemo(() => {
             let sortableItems = [...filteredReportSuggestions];
-            if (sortConfig.key !== null) {
-                sortableItems.sort((a, b) => {
-                    if (a[sortConfig.key!] < b[sortConfig.key!]) {
-                        return sortConfig.direction === 'asc' ? -1 : 1;
-                    }
-                    if (a[sortConfig.key!] > b[sortConfig.key!]) {
-                        return sortConfig.direction === 'asc' ? 1 : -1;
-                    }
+            if (sortConfig !== null) {
+                sortableItems.sort((a: any, b: any) => {
+                    if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
+                    if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
                     return 0;
                 });
             }
             return sortableItems;
         }, [filteredReportSuggestions, sortConfig]);
 
-        const requestSort = (key: keyof Suggestion) => {
+        const requestSort = (key: string) => {
             let direction: 'asc' | 'desc' = 'asc';
-            if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
                 direction = 'desc';
             }
             setSortConfig({ key, direction });
         };
 
-        const renderSortIcon = (columnKey: keyof Suggestion) => {
-            if (sortConfig.key !== columnKey) return <ArrowUpDown size={14} className="ml-1 text-slate-600" />;
-            return sortConfig.direction === 'asc' 
-                ? <ArrowUp size={14} className="ml-1 text-cyan-400" /> 
-                : <ArrowDown size={14} className="ml-1 text-cyan-400" />;
+        const getSortIcon = (key: string) => {
+            if (!sortConfig || sortConfig.key !== key) return <ArrowUpDown size={14} className="opacity-50" />;
+            return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="text-cyan-400" /> : <ArrowDown size={14} className="text-cyan-400" />;
         };
 
-        const handleExportCSV = () => {
-            const headers = ['Role', 'Sentimento', 'Feedback'];
-            const csvContent = [
-                headers.join(','),
-                ...sortedSuggestions.map(s => {
-                    const cleanText = s.text.replace(/"/g, '""'); // Escape double quotes within content
-                    return `"${s.role}","${s.sentiment}","${cleanText}"`;
-                })
-            ].join('\n');
-
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `relatorio_filtrado_${new Date().toISOString().slice(0,10)}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        };
-
-        const sentimentCounts = { Positivo: 0, Neutro: 0, Negativo: 0 };
-        filteredReportSuggestions.forEach(s => {
-            if (s.sentiment in sentimentCounts) {
-                sentimentCounts[s.sentiment]++;
-            }
-        });
-
-        const totalFiltered = filteredReportSuggestions.length;
+        // Pie Chart Data (Sentiment Distribution)
         const pieData = [
-            { name: 'Positivo', value: sentimentCounts.Positivo, color: '#4ade80' },
-            { name: 'Neutro', value: sentimentCounts.Neutro, color: '#94a3b8' },
-            { name: 'Negativo', value: sentimentCounts.Negativo, color: '#f87171' }
-        ].filter(item => item.value > 0);
+            { name: 'Positivo', value: filteredReportSuggestions.filter(s => s.sentiment === 'Positivo').length, color: '#4ade80' },
+            { name: 'Neutro', value: filteredReportSuggestions.filter(s => s.sentiment === 'Neutro').length, color: '#94a3b8' },
+            { name: 'Negativo', value: filteredReportSuggestions.filter(s => s.sentiment === 'Negativo').length, color: '#f87171' },
+        ].filter(d => d.value > 0);
 
-        // Prepare Data for Stacked Bar Chart (Role vs Sentiment)
-        const roleSentimentData = uniqueRoles.filter(r => r !== 'Todos').map(role => {
-            const roleSuggestions = suggestions.filter(s => s.role === role);
-            const positive = roleSuggestions.filter(s => s.sentiment === 'Positivo').length;
-            const neutral = roleSuggestions.filter(s => s.sentiment === 'Neutro').length;
-            const negative = roleSuggestions.filter(s => s.sentiment === 'Negativo').length;
+        // Bar Chart Data (Role Sentiment Distribution) - only if no specific role filtered
+        const roleSentimentData = reportRoleFilter === 'Todos' ? [...new Set(suggestions.map(s => s.role))].map(role => {
+            const roleSug = suggestions.filter(s => s.role === role);
             return {
                 name: role,
-                Positivo: positive,
-                Neutro: neutral,
-                Negativo: negative
+                Positivo: roleSug.filter(s => s.sentiment === 'Positivo').length,
+                Neutro: roleSug.filter(s => s.sentiment === 'Neutro').length,
+                Negativo: roleSug.filter(s => s.sentiment === 'Negativo').length,
             };
-        });
+        }) : [];
 
-        // Prepare Data for Trend Chart (Timestamp vs Sentiment)
+        // Trend Chart Data (Sentiment over time)
         const trendData = React.useMemo(() => {
-            const grouped: Record<string, { date: string, Positivo: number, Neutro: number, Negativo: number }> = {};
-            
-            // Use global suggestions or filtered? 
-            // Typically trend is useful for the current view, but let's stick to 'filteredReportSuggestions' 
-            // so the user can see trends for specific roles if they filter by role.
-            filteredReportSuggestions.forEach(s => {
-                // Extract simple date YYYY-MM-DD. 
-                // Assuming timestamp format 'DD/MM/YYYY HH:mm:ss' or ISO. 
-                // Let's try to be robust.
-                let dateKey = 'N/A';
-                if (s.timestamp) {
-                    // If it matches ISO-like YYYY-MM-DD
-                    if (s.timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
-                        dateKey = s.timestamp.substring(0, 10);
-                    } 
-                    // If it matches DD/MM/YYYY
-                    else if (s.timestamp.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)) {
-                        // Normalize to sortable YYYY-MM-DD for the chart
-                        const parts = s.timestamp.split(' ')[0].split('/');
-                        if (parts.length === 3) {
-                            dateKey = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                        }
-                    } else {
-                        // Fallback just take first 10 chars
-                        dateKey = s.timestamp.substring(0, 10);
-                    }
-                }
-
-                if (!grouped[dateKey]) {
-                    grouped[dateKey] = { date: dateKey, Positivo: 0, Neutro: 0, Negativo: 0 };
-                }
-                grouped[dateKey][s.sentiment]++;
+            const groups: Record<string, any> = {};
+            sortedSuggestions.forEach(s => {
+                const date = s.timestamp || 'Sem Data';
+                if (!groups[date]) groups[date] = { date, Positivo: 0, Neutro: 0, Negativo: 0 };
+                groups[date][s.sentiment]++;
             });
+            return Object.values(groups).sort((a: any, b: any) => a.date.localeCompare(b.date));
+        }, [sortedSuggestions]);
 
-            return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
-        }, [filteredReportSuggestions]);
-
+        // Critical Points Extraction
+        const criticalPointsSection = React.useMemo(() => {
+            if (!analysis) return null;
+            // Regex to match "## ... Pontos Críticos" until the next "##"
+            const match = analysis.match(/##\s*[^\n]*Pontos Críticos[\s\S]*?(?=\n##|$)/i);
+            return match ? match[0] : null;
+        }, [analysis]);
 
         return (
             <div className="animate-in space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div className="p-6 rounded-2xl bg-green-900/20 border border-green-800 flex items-center justify-between"><div><p className="text-green-400 text-xs font-bold uppercase tracking-widest">Positivos</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.positive}%</h4><p className="text-slate-400 text-xs mt-1">{sentimentStats.counts.Positivo} comentários</p></div><div className="p-3 rounded-xl bg-green-500/20 text-green-400"><Smile size={24}/></div></div>
-                    <div className="p-6 rounded-2xl bg-slate-800/50 border border-slate-700 flex items-center justify-between"><div><p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Neutros</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.neutral}%</h4><p className="text-slate-500 text-xs mt-1">{sentimentStats.counts.Neutro} comentários</p></div><div className="p-3 rounded-xl bg-slate-700/50 text-slate-400"><Meh size={24}/></div></div>
-                    <div className="p-6 rounded-2xl bg-red-900/20 border border-red-800 flex items-center justify-between"><div><p className="text-red-400 text-xs font-bold uppercase tracking-widest">Negativos</p><h4 className="text-3xl font-black text-white mt-1">{sentimentStats.negative}%</h4><p className="text-slate-400 text-xs mt-1">{sentimentStats.counts.Negativo} comentários</p></div><div className="p-3 rounded-xl bg-red-500/20 text-red-400"><Frown size={24}/></div></div>
-                </div>
-                <div className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-xl relative">
-                    <div className="flex flex-col xl:flex-row justify-between items-center mb-8 gap-4">
-                        <div><h2 className="text-3xl font-bold text-white flex items-center gap-3"><FileText size={32} className="text-cyan-400" /> Relatório Detalhado</h2></div>
-                        <div className="flex flex-wrap items-center gap-3 justify-end">
-                            {/* Role Filter */}
-                            <div className="relative">
-                                <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <select 
-                                    value={reportRoleFilter}
-                                    onChange={(e) => setReportRoleFilter(e.target.value)}
-                                    className="pl-10 pr-8 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-slate-300 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none appearance-none cursor-pointer hover:bg-slate-800 transition-colors w-40"
-                                >
-                                    {uniqueRoles.map(role => (
-                                        <option key={role} value={role}>{role}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                            </div>
-
-                            {/* Sentiment Filter */}
-                            <div className="relative">
-                                <Activity size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <select 
-                                    value={reportSentimentFilter}
-                                    onChange={(e) => setReportSentimentFilter(e.target.value)}
-                                    className="pl-10 pr-8 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-slate-300 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none appearance-none cursor-pointer hover:bg-slate-800 transition-colors w-40"
-                                >
-                                    <option value="Todos">Todos (Sent)</option>
-                                    <option value="Positivo">Positivo</option>
-                                    <option value="Neutro">Neutro</option>
-                                    <option value="Negativo">Negativo</option>
-                                </select>
-                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                            </div>
-
-                            {/* Export CSV Button */}
-                             <button 
-                                onClick={handleExportCSV} 
-                                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl border border-slate-700 font-bold text-sm transition-all shadow hover:shadow-cyan-500/10"
+                
+                {/* Filters and Controls */}
+                <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                    <div className="flex gap-4 flex-wrap">
+                        {/* Role Filter */}
+                        <div className="relative">
+                            <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                            <select 
+                                value={reportRoleFilter}
+                                onChange={(e) => setReportRoleFilter(e.target.value)}
+                                className="pl-9 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-300 text-sm focus:outline-none focus:border-cyan-500 appearance-none cursor-pointer hover:bg-slate-750"
                             >
-                                <FileSpreadsheet size={16} /> <span className="hidden sm:inline">CSV</span>
-                            </button>
+                                <option value="Todos">Todos os Perfis</option>
+                                {[...new Set(suggestions.map(s => s.role))].map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                        </div>
 
-                            <div className="bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 font-mono text-sm shadow-inner min-w-[100px] text-center">Total: <span className="text-white font-bold">{filteredReportSuggestions.length}</span></div>
+                        {/* Sentiment Filter */}
+                         <div className="relative">
+                            <Activity size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                            <select 
+                                value={reportSentimentFilter}
+                                onChange={(e) => setReportSentimentFilter(e.target.value)}
+                                className="pl-9 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-300 text-sm focus:outline-none focus:border-cyan-500 appearance-none cursor-pointer hover:bg-slate-750"
+                            >
+                                <option value="Todos">Todos Sentimentos</option>
+                                <option value="Positivo">Positivo</option>
+                                <option value="Neutro">Neutro</option>
+                                <option value="Negativo">Negativo</option>
+                            </select>
+                            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                         </div>
                     </div>
                     
-                    {/* NEW TREND CHART SECTION */}
-                    {trendData.length > 0 && (
-                        <div className="bg-[#0f172a]/50 p-6 rounded-2xl border border-slate-800 mb-8">
-                            <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
-                                <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><Calendar size={18}/></div>
-                                Evolução Temporal dos Sentimentos
-                            </h3>
-                            <div className="h-[300px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={trendData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
-                                        <XAxis dataKey="date" tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} />
-                                        <YAxis tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} />
-                                        <RechartsTooltip content={<DarkTooltip />} cursor={{ stroke: '#334155', strokeWidth: 1 }} />
-                                        <Legend wrapperStyle={{paddingTop: '20px'}} />
-                                        <Line type="monotone" dataKey="Positivo" stroke="#4ade80" strokeWidth={3} dot={{r: 4, fill: '#4ade80'}} />
-                                        <Line type="monotone" dataKey="Neutro" stroke="#94a3b8" strokeWidth={3} dot={{r: 4, fill: '#94a3b8'}} />
-                                        <Line type="monotone" dataKey="Negativo" stroke="#f87171" strokeWidth={3} dot={{r: 4, fill: '#f87171'}} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    )}
+                    <button 
+                        onClick={handleExportCSV}
+                        className="flex items-center gap-2 bg-green-900/30 hover:bg-green-900/50 text-green-400 px-4 py-2 rounded-xl border border-green-800/50 font-bold text-sm transition-all"
+                    >
+                        <FileSpreadsheet size={16} /> Exportar CSV
+                    </button>
+                </div>
 
-                    {/* STACKED BAR CHART SECTION */}
-                    {roleSentimentData.length > 0 && (
-                        <div className="bg-[#0f172a]/50 p-6 rounded-2xl border border-slate-800 mb-8">
-                            <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
-                                <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400"><BarChart3 size={18}/></div>
-                                Distribuição de Sentimentos por Perfil
-                            </h3>
-                            <div className="h-[300px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={roleSentimentData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
-                                        <XAxis dataKey="name" tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} />
-                                        <YAxis tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} />
-                                        <RechartsTooltip content={<DarkTooltip />} cursor={{fill: '#334155', opacity: 0.3}} />
-                                        <Legend wrapperStyle={{paddingTop: '20px'}} />
-                                        <Bar dataKey="Positivo" stackId="a" fill="#4ade80" radius={[0, 0, 4, 4]} />
-                                        <Bar dataKey="Neutro" stackId="a" fill="#94a3b8" radius={[0, 0, 0, 0]} />
-                                        <Bar dataKey="Negativo" stackId="a" fill="#f87171" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                {/* AI Critical Points Section */}
+                {criticalPointsSection && (
+                    <div className="p-6 rounded-2xl bg-red-950/20 border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.1)] relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                        <div className="flex items-center gap-3 mb-4 relative z-10">
+                            <div className="p-2 bg-red-500/20 rounded-lg text-red-400">
+                                <AlertTriangle size={24} />
                             </div>
+                            <h3 className="text-xl font-bold text-red-100">Alertas Críticos de Inteligência</h3>
                         </div>
-                    )}
-
-                    {totalFiltered > 0 && (
-                        <div className="mb-6 p-4 bg-slate-900/30 rounded-xl border border-slate-700/50 flex flex-wrap items-center justify-center gap-8">
-                            <div className="h-32 w-32 relative">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={pieData}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={25}
-                                            outerRadius={50}
-                                            paddingAngle={2}
-                                            dataKey="value"
-                                            stroke="none"
-                                        >
-                                            {pieData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.color} />
-                                            ))}
-                                        </Pie>
-                                        <RechartsTooltip content={<DarkTooltip />} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <div className="flex gap-6">
-                                {pieData.map(entry => (
-                                    <div key={entry.name} className="flex flex-col items-center">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                                            {entry.name}
-                                        </span>
-                                        <span className="text-xl font-black text-white">{entry.value}</span>
-                                        <span className="text-xs text-slate-500 font-mono">({((entry.value / totalFiltered) * 100).toFixed(1)}%)</span>
-                                    </div>
-                                ))}
-                            </div>
+                        <div className="relative z-10">
+                            <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]} 
+                                components={MarkdownRenderers}
+                            >
+                                {criticalPointsSection}
+                            </ReactMarkdown>
                         </div>
-                    )}
+                    </div>
+                )}
 
+                {/* Visualizations Row */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Sentiment Pie Chart */}
+                    <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl lg:col-span-1">
+                        <h4 className="text-white font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider"><Activity size={18} className="text-purple-400" /> Distribuição Atual</h4>
+                        <div className="h-[200px] w-full flex items-center justify-center">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                        {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />)}
+                                    </Pie>
+                                    <RechartsTooltip content={<DarkTooltip />} />
+                                    <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Stacked Bar (Roles) or Trend Line */}
+                    <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl lg:col-span-2">
+                        {reportRoleFilter === 'Todos' ? (
+                            <>
+                                <h4 className="text-white font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider"><BarChart3 size={18} className="text-blue-400" /> Sentimento por Perfil</h4>
+                                <div className="h-[200px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={roleSentimentData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                                            <RechartsTooltip content={<DarkTooltip />} cursor={{fill: '#334155', opacity: 0.3}} />
+                                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                                            <Bar dataKey="Positivo" stackId="a" fill="#4ade80" radius={[0,0,4,4]} barSize={40} />
+                                            <Bar dataKey="Neutro" stackId="a" fill="#94a3b8" />
+                                            <Bar dataKey="Negativo" stackId="a" fill="#f87171" radius={[4,4,0,0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h4 className="text-white font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider"><Calendar size={18} className="text-orange-400" /> Tendência Temporal ({reportRoleFilter})</h4>
+                                <div className="h-[200px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={trendData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                                            <RechartsTooltip content={<DarkTooltip />} />
+                                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                                            <Line type="monotone" dataKey="Positivo" stroke="#4ade80" strokeWidth={2} dot={false} />
+                                            <Line type="monotone" dataKey="Neutro" stroke="#94a3b8" strokeWidth={2} dot={false} />
+                                            <Line type="monotone" dataKey="Negativo" stroke="#f87171" strokeWidth={2} dot={false} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {/* Detailed Table */}
+                <div className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-xl">
+                    <div className="flex justify-between items-center mb-8">
+                        <div><h2 className="text-3xl font-bold text-white flex items-center gap-3"><FileText size={32} className="text-cyan-400" /> Relatório Detalhado</h2></div>
+                        <div className="bg-slate-900 px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 font-mono text-sm shadow-inner">Total Filtrado: <span className="text-white font-bold">{sortedSuggestions.length}</span></div>
+                    </div>
                     <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/50">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm text-slate-400">
                                 <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider">
                                     <tr>
-                                        <th 
-                                            className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-white transition-colors select-none"
-                                            onClick={() => requestSort('role')}
-                                        >
-                                            <div className="flex items-center">Role {renderSortIcon('role')}</div>
+                                        <th onClick={() => requestSort('role')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
+                                            <div className="flex items-center gap-2">Role {getSortIcon('role')}</div>
                                         </th>
-                                        <th 
-                                            className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-white transition-colors select-none"
-                                            onClick={() => requestSort('timestamp')}
-                                        >
-                                            <div className="flex items-center">Data {renderSortIcon('timestamp')}</div>
+                                        <th onClick={() => requestSort('timestamp')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
+                                            <div className="flex items-center gap-2">Data {getSortIcon('timestamp')}</div>
                                         </th>
-                                        <th 
-                                            className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-white transition-colors select-none"
-                                            onClick={() => requestSort('sentiment')}
-                                        >
-                                            <div className="flex items-center">Sentimento {renderSortIcon('sentiment')}</div>
+                                        <th onClick={() => requestSort('sentiment')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
+                                             <div className="flex items-center gap-2">Sentimento {getSortIcon('sentiment')}</div>
                                         </th>
-                                        <th 
-                                            className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-white transition-colors select-none"
-                                            onClick={() => requestSort('text')}
-                                        >
-                                            <div className="flex items-center">Feedback {renderSortIcon('text')}</div>
+                                        <th onClick={() => requestSort('text')} className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-cyan-400 transition-colors group">
+                                             <div className="flex items-center gap-2">Feedback {getSortIcon('text')}</div>
                                         </th>
                                         <th className="px-6 py-5 border-b border-slate-800 text-right">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800">
-                                    {sortedSuggestions.length > 0 ? (sortedSuggestions.map((sug) => (
-                                        <tr 
-                                            key={sug.id} 
-                                            className={`transition-colors group ${
-                                                sug.sentiment === 'Negativo' 
-                                                ? 'bg-red-500/10 hover:bg-red-500/20 border-l-[3px] border-l-red-500' 
-                                                : 'hover:bg-slate-800/50 border-l-[3px] border-l-transparent'
-                                            }`}
-                                        >
-                                            <td className="px-6 py-5 w-48 align-top"><span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border ${sug.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : sug.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{sug.role}</span></td>
-                                            <td className="px-6 py-5 w-32 text-slate-400 font-mono text-xs">{sug.timestamp || '-'}</td>
-                                            <td className="px-6 py-5 w-32"><span className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold border ${sug.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : sug.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{sug.sentiment}</span></td>
-                                            <td className="px-6 py-5 text-slate-300 leading-relaxed group-hover:text-white transition-colors line-clamp-2 max-w-md">{sug.text}</td>
-                                            <td className="px-6 py-5 text-right align-top">
-                                                <button
-                                                    onClick={() => setSelectedSuggestion(sug)}
-                                                    className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
-                                                    title="Ver Detalhes"
-                                                >
-                                                    <Eye size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))) : (<tr><td colSpan={5} className="px-6 py-12 text-center text-slate-600 italic">Nenhum dado disponível.</td></tr>)}
+                                    {sortedSuggestions.length > 0 ? (
+                                        sortedSuggestions.map((sug) => (
+                                            <tr 
+                                                key={sug.id} 
+                                                className={`hover:bg-slate-800/50 transition-colors group ${sug.sentiment === 'Negativo' ? 'bg-red-950/5 hover:bg-red-900/10 border-l-2 border-red-500' : ''}`}
+                                            >
+                                                <td className="px-6 py-5 w-40 align-top">
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border ${sug.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : sug.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{sug.role}</span>
+                                                </td>
+                                                <td className="px-6 py-5 w-32 align-top font-mono text-xs text-slate-500">
+                                                    {sug.timestamp || '-'}
+                                                </td>
+                                                <td className="px-6 py-5 w-32 align-top">
+                                                    <span className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold border ${sug.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : sug.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{sug.sentiment}</span>
+                                                </td>
+                                                <td className="px-6 py-5 text-slate-300 leading-relaxed group-hover:text-white transition-colors line-clamp-2 max-w-lg">
+                                                    {sug.text.length > 100 ? sug.text.substring(0, 100) + '...' : sug.text}
+                                                </td>
+                                                <td className="px-6 py-5 text-right align-top">
+                                                    <button 
+                                                        onClick={() => setSelectedSuggestion(sug)}
+                                                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-cyan-400 transition-all border border-slate-700"
+                                                        title="Ver Detalhes"
+                                                    >
+                                                        <Eye size={16} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-600 italic">Nenhum dado disponível.</td></tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
                     </div>
+                </div>
 
-                    {/* DETAILS MODAL */}
-                    {selectedSuggestion && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                            <div className="bg-[#1e293b] border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 relative flex flex-col max-h-[90vh]">
-                                <button
-                                    onClick={() => setSelectedSuggestion(null)}
-                                    className="absolute top-4 right-4 p-2 rounded-full bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors z-10"
-                                >
-                                    <X size={20} />
-                                </button>
-
-                                <div className="p-8 overflow-y-auto custom-scrollbar">
-                                    <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                                        <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><FileText size={24}/></div>
-                                        Detalhes do Feedback
-                                    </h3>
-
-                                    <div className="flex gap-4 mb-6">
-                                       <span className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-bold border ${selectedSuggestion.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : selectedSuggestion.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{selectedSuggestion.role}</span>
-                                       <span className={`px-3 py-1 rounded-full text-xs uppercase font-bold border flex items-center ${selectedSuggestion.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : selectedSuggestion.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{selectedSuggestion.sentiment}</span>
-                                       <span className="px-3 py-1 rounded-full text-xs font-mono font-bold border bg-slate-800 text-slate-400 border-slate-700 flex items-center">{selectedSuggestion.timestamp || 'Sem data'}</span>
+                {/* Modal for Details */}
+                {selectedSuggestion && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setSelectedSuggestion(null)}></div>
+                        <div className="relative w-full max-w-2xl bg-[#1e293b] rounded-3xl border border-slate-700 shadow-2xl p-8 animate-in">
+                            <button 
+                                onClick={() => setSelectedSuggestion(null)}
+                                className="absolute top-4 right-4 p-2 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-400 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                            
+                            <div className="flex flex-col gap-6">
+                                <div className="flex items-center gap-3">
+                                    <div className={`px-3 py-1.5 rounded-lg border text-sm font-bold uppercase tracking-wider ${
+                                        selectedSuggestion.role.includes('Aluno') ? 'bg-blue-950/50 text-blue-400 border-blue-900' : 
+                                        selectedSuggestion.role.includes('Professor') ? 'bg-green-950/50 text-green-400 border-green-900' : 
+                                        'bg-orange-950/50 text-orange-400 border-orange-900'
+                                    }`}>
+                                        {selectedSuggestion.role}
                                     </div>
-
-                                    <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-800">
-                                        <div className="markdown-body">
-                                            <ReactMarkdown 
-                                                remarkPlugins={[remarkGfm]}
-                                                components={{
-                                                    ...MarkdownRenderers,
-                                                    p: ({node, ...props}: any) => <p className="text-slate-300 mb-4 leading-relaxed text-lg" {...props} />
-                                                }}
-                                            >
-                                                {selectedSuggestion.text}
-                                            </ReactMarkdown>
+                                    <div className={`px-3 py-1.5 rounded-full border text-xs font-bold uppercase ${
+                                        selectedSuggestion.sentiment === 'Positivo' ? 'bg-green-900/20 text-green-400 border-green-800' : 
+                                        selectedSuggestion.sentiment === 'Negativo' ? 'bg-red-900/20 text-red-400 border-red-800' : 
+                                        'bg-slate-800 text-slate-400 border-slate-700'
+                                    }`}>
+                                        {selectedSuggestion.sentiment}
+                                    </div>
+                                    {selectedSuggestion.timestamp && (
+                                        <div className="text-slate-500 font-mono text-sm ml-auto">
+                                            {selectedSuggestion.timestamp}
                                         </div>
-                                    </div>
-                                    
-                                    <div className="mt-6 flex justify-end">
-                                        <button
-                                            onClick={() => setSelectedSuggestion(null)}
-                                            className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors"
-                                        >
-                                            Fechar
-                                        </button>
-                                    </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 overflow-y-auto max-h-[60vh]">
+                                    <ReactMarkdown 
+                                        remarkPlugins={[remarkGfm]} 
+                                        components={{
+                                            ...MarkdownRenderers,
+                                            p: ({node, ...props}: any) => <p className="text-slate-200 text-lg leading-relaxed" {...props} />
+                                        }}
+                                    >
+                                        {selectedSuggestion.text}
+                                    </ReactMarkdown>
+                                </div>
+                                
+                                <div className="flex justify-end">
+                                    <button 
+                                        onClick={() => setSelectedSuggestion(null)}
+                                        className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
+                                    >
+                                        Fechar
+                                    </button>
                                 </div>
                             </div>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
         );
     };
 
     const SettingsView = () => (
-        <div className="animate-in max-w-3xl mx-auto mt-10">
-            <div className="bg-[#1e293b] p-10 rounded-3xl border border-slate-800 shadow-2xl">
-                <h2 className="text-3xl font-bold text-white mb-8 flex items-center gap-4">
-                    <div className="p-3 bg-slate-800 rounded-2xl"><Settings size={32} className="text-slate-400" /></div>
-                    Configurações
-                </h2>
-                <div className="space-y-8">
-                    <div className="bg-slate-900/50 p-8 rounded-3xl border border-slate-700/50">
-                        <h3 className="text-xl font-bold text-purple-400 mb-4 flex items-center gap-3">
-                            <BrainCircuit size={24}/> Integração Gemini AI
-                        </h3>
-                        <div className="space-y-4">
-                            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                                <p className="text-slate-400 text-sm">
-                                    A chave da API está configurada através das Variáveis de Ambiente do servidor (<code>process.env.API_KEY</code>).
-                                    Para alterar a chave, acesse as configurações de implantação no Vercel.
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-2 text-green-500 text-sm font-bold">
-                                <CheckCircle size={16} />
-                                Integração Ativa
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+         <div className="animate-in max-w-3xl mx-auto mt-10">
+             <div className="bg-[#1e293b] p-10 rounded-3xl border border-slate-800 shadow-2xl">
+                 <h2 className="text-3xl font-bold text-white mb-8 flex items-center gap-4"><div className="p-3 bg-slate-800 rounded-2xl"><Settings size={32} className="text-slate-400" /></div>Configurações</h2>
+                 <div className="bg-slate-900/50 p-8 rounded-3xl border border-slate-700/50 text-center text-slate-400">
+                    <p>As configurações da API Key agora são gerenciadas via variáveis de ambiente do sistema (Vercel).</p>
+                    <p className="mt-2 text-sm text-slate-500">API_KEY configurada no backend.</p>
+                 </div>
+             </div>
         </div>
     );
 
@@ -954,7 +896,7 @@ const App: React.FC = () => {
                                     <Upload size={18} /> <span className="hidden sm:inline">Importar</span>
                                 </button>
                             </div>
-                            <button onClick={downloadPDF} disabled={generatingPdf} className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-3 rounded-xl border border-slate-700 font-bold transition-all shadow-lg hover:shadow-cyan-500/10 disabled:opacity-50">
+                            <button onClick={downloadPDF} className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-3 rounded-xl border border-slate-700 font-bold transition-all shadow-lg hover:shadow-cyan-500/10">
                                 {generatingPdf ? <Loader2 size={18} className="animate-spin"/> : <FileDown size={18} />} PDF
                             </button>
                         </div>
