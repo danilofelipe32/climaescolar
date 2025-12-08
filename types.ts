@@ -1,3 +1,4 @@
+
 export interface SurveyData {
   timestamp: string;
   role: string;
@@ -56,4 +57,16 @@ export interface SentimentStats {
 export interface ChartData {
   radar: RadarData[];
   safety: SafetyByRole[];
+}
+
+export interface Dataset {
+  id: string;
+  name: string;
+  uploadDate: Date;
+  data: SurveyData[];
+  stats: Stats;
+  chartData: ChartData;
+  suggestions: Suggestion[];
+  advancedStats: AdvancedStat[];
+  sentimentStats: SentimentStats;
 }

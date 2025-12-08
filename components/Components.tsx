@@ -3,7 +3,7 @@ import React from 'react';
 import { 
     LayoutDashboard, Calculator, FileText, Settings, Shield, School, 
     Heart, AlertTriangle, GraduationCap, Briefcase, User, Smile, 
-    Frown, Meh, Quote, LucideIcon
+    Frown, Meh, Quote, LucideIcon, GitCompare
 } from 'lucide-react';
 import { Suggestion } from '../types';
 
@@ -16,6 +16,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
     const items = [
         { id: 'dashboard', icon: LayoutDashboard, label: 'Dash' },
+        { id: 'compare', icon: GitCompare, label: 'Comp' }, // New Comparison Tab
         { id: 'stats', icon: Calculator, label: 'Stats' },
         { id: 'reports', icon: FileText, label: 'Docs' },
         { id: 'settings', icon: Settings, label: 'Config' }
@@ -32,6 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
                         key={item.id} 
                         onClick={() => setActiveTab(item.id)} 
                         className={`p-3.5 rounded-2xl transition-all duration-300 relative group flex flex-col items-center gap-1 ${activeTab === item.id ? 'bg-slate-800 text-cyan-400 shadow-[inset_0_0_20px_rgba(6,182,212,0.1)] border border-slate-700' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-900'}`}
+                        title={item.label}
                     >
                         <item.icon size={26} strokeWidth={activeTab === item.id ? 2.5 : 2} />
                         {activeTab === item.id && <span className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-1 h-8 bg-cyan-400 rounded-r-full shadow-[0_0_10px_#06b6d4]"></span>}
@@ -119,9 +121,9 @@ export const DarkTooltip = ({ active, payload, label }: any) => {
                 <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">{label}</p>
                 {payload.map((entry: any, index: number) => (
                     <div key={index} className="flex items-center gap-2 mb-1">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color || entry.stroke || entry.fill }}></div>
                         <span className="text-sm font-bold text-white">{entry.name}:</span>
-                        <span className="text-sm font-mono text-cyan-400">{entry.value}</span>
+                        <span className="text-sm font-mono text-cyan-400">{typeof entry.value === 'number' ? entry.value.toFixed(1) : entry.value}</span>
                     </div>
                 ))}
             </div>

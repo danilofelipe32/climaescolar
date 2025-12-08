@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -13,13 +12,13 @@ import {
     Shield, School, MessageSquare, AlertTriangle, Upload, FileText, Heart, Activity, 
     CheckCircle, Sparkles, BrainCircuit, FileDown, Loader2, Calculator, Settings,
     Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet, BarChart3, Eye, X,
-    ArrowUpDown, ArrowUp, ArrowDown, Calendar
+    ArrowUpDown, ArrowUp, ArrowDown, Calendar, GitCompare, Layers
 } from 'lucide-react';
 
 import { Sidebar, KpiCard, SuggestionCard, DarkTooltip, MarkdownRenderers } from './components/Components';
 import { analyzeSentiment, calculateStats, interpretStdDev, parseCSV, processCSVData, scaleMap } from './utils';
 import { generateSchoolReport } from './services/geminiService';
-import { Stats, ChartData, Suggestion, AdvancedStat, SentimentStats, SurveyData } from './types';
+import { Stats, ChartData, Suggestion, AdvancedStat, SentimentStats, SurveyData, Dataset } from './types';
 
 // --- INITIAL MOCK DATA ---
 const REPORT_STATS: Stats = { total: 3833, avgSafety: "3.8", avgFacilities: "2.1", avgMentalHealth: "1.2", avgSupport: "0.4", violencePerc: "21.6" };
@@ -45,6 +44,10 @@ const REPORT_ADVANCED_STATS: AdvancedStat[] = [
     { metric: "Saúde Mental", mean: 1.2, median: 1.0, mode: 1, stdDev: 0.4, interpretation: "Consenso Crítico (Baixo)" },
     { metric: "Respeito", mean: 3.2, median: 3.0, mode: 3, stdDev: 1.1, interpretation: "Variabilidade Moderada" }
 ];
+
+const REPORT_SENTIMENT_STATS: SentimentStats = { 
+    positive: 0, neutral: 40, negative: 60, counts: { 'Positivo': 0, 'Neutro': 2, 'Negativo': 3 } 
+};
 
 // Note: Ensure strictly no indentation for the table part to avoid Markdown parsing issues
 const REPORT_AI_ANALYSIS = `
@@ -79,8 +82,24 @@ A análise qualitativa dos comentários indica um clima emocional marcado pela *
     * *Justificativa:* Eliminar a vulnerabilidade física é pré-requisito para que o processo pedagógico ocorra com tranquilidade.
 `;
 
+const INITIAL_DATASET: Dataset = {
+    id: 'demo-2025',
+    name: 'Demo Data 2025',
+    uploadDate: new Date(),
+    data: [], // Mock data doesn't have raw rows stored but we use stats
+    stats: REPORT_STATS,
+    chartData: { radar: REPORT_RADAR, safety: REPORT_SAFETY_BY_ROLE },
+    suggestions: REPORT_SUGGESTIONS,
+    advancedStats: REPORT_ADVANCED_STATS,
+    sentimentStats: REPORT_SENTIMENT_STATS
+};
+
 const App: React.FC = () => {
-    const [data, setData] = useState<SurveyData[]>([]);
+    // Dataset Management
+    const [datasets, setDatasets] = useState<Dataset[]>([INITIAL_DATASET]);
+    const [activeDatasetId, setActiveDatasetId] = useState<string>('demo-2025');
+
+    // UI State
     const [activeTab, setActiveTab] = useState('dashboard');
     const [filter, setFilter] = useState('Todos');
     const [reportRoleFilter, setReportRoleFilter] = useState('Todos');
@@ -91,38 +110,21 @@ const App: React.FC = () => {
     const [loadingAI, setLoadingAI] = useState(false);
     const [errorAI, setErrorAI] = useState<string | null>(null);
     const [generatingPdf, setGeneratingPdf] = useState(false);
-    
-    // Dashboard Data State
-    const [stats, setStats] = useState<Stats>(REPORT_STATS);
-    const [chartData, setChartData] = useState<ChartData>({ radar: REPORT_RADAR, safety: REPORT_SAFETY_BY_ROLE });
-    const [suggestions, setSuggestions] = useState<Suggestion[]>(REPORT_SUGGESTIONS);
-    const [advancedStats, setAdvancedStats] = useState<AdvancedStat[]>(REPORT_ADVANCED_STATS);
-    const [sentimentStats, setSentimentStats] = useState<SentimentStats>({ positive: 0, neutral: 0, negative: 0, counts: { 'Positivo': 0, 'Neutro': 0, 'Negativo': 0 } });
 
-    // Initialize Sentiment Stats from mock data on mount
-    useEffect(() => {
-        if (data.length === 0 && suggestions.length > 0) {
-            calculateSentimentStats(suggestions);
-        }
-    }, []);
+    // Derived active data for current view
+    const activeDataset = useMemo(() => 
+        datasets.find(d => d.id === activeDatasetId) || datasets[0], 
+    [datasets, activeDatasetId]);
 
-    const calculateSentimentStats = (sugs: Suggestion[]) => {
-        const counts: Record<string, number> = { Positivo: 0, Neutro: 0, Negativo: 0 };
-        sugs.forEach(s => { if (counts[s.sentiment] !== undefined) counts[s.sentiment]++; });
-        const totalSug = sugs.length;
-        setSentimentStats({
-            positive: totalSug ? Math.round((counts.Positivo / totalSug) * 100) : 0,
-            neutral: totalSug ? Math.round((counts.Neutro / totalSug) * 100) : 0,
-            negative: totalSug ? Math.round((counts.Negativo / totalSug) * 100) : 0,
-            counts
-        });
-    };
+    const { stats, chartData, suggestions, advancedStats, sentimentStats } = activeDataset;
 
-    // Process uploaded data
-    useEffect(() => {
-        if (data.length === 0) return;
+    // --- Data Processing Helper ---
+    const processRawDataToDataset = (name: string, rawText: string): Dataset => {
+        const rows = parseCSV(rawText);
+        const parsedData = processCSVData(rows);
+        const total = parsedData.length;
         
-        const total = data.length;
+        // --- Calculate Stats ---
         let totalSafetyScore = 0;
         let violenceCount = 0;
         let mentalHealthScore = 0;
@@ -136,7 +138,7 @@ const App: React.FC = () => {
         const dimensions: Record<string, number> = { 'Segurança': 0, 'Infraestrutura': 0, 'Respeito': 0, 'Saúde Mental': 0, 'Apoio/Suporte': 0 };
         const grouping: Record<string, { role: string, total: number, score: number }> = {};
 
-        data.forEach(item => {
+        parsedData.forEach(item => {
             const safetyVal = scaleMap[item.safety] || 0;
             const mentalVal = scaleMap[item.mentalHealth] || 0;
             const facilVal = scaleMap[item.facilities] || 0;
@@ -169,55 +171,89 @@ const App: React.FC = () => {
             avgSafety: (totalSafetyScore / total).toFixed(1), 
             avgFacilities: (facilitiesScore / total).toFixed(1), 
             avgMentalHealth: (mentalHealthScore / total).toFixed(1), 
-            avgSupport: "0.5", // Calculated/Mocked
+            avgSupport: "0.5", 
             violencePerc: ((violenceCount / total) * 100).toFixed(1) 
         };
-        setStats(newStats);
 
         const radar = Object.keys(dimensions).map(key => ({ subject: key, A: parseFloat((dimensions[key] / total).toFixed(1)), fullMark: 5 }));
         const safety = Object.values(grouping).map(g => ({ name: g.role, Segurança: parseFloat((g.score / g.total).toFixed(1)) })).sort((a, b) => b.Segurança - a.Segurança);
-        setChartData({ radar, safety });
         
-        const newSuggestions: Suggestion[] = data.filter(d => d.suggestion && d.suggestion.length > 3).map((d, i) => ({ 
+        const newSuggestions: Suggestion[] = parsedData.filter(d => d.suggestion && d.suggestion.length > 3).map((d, i) => ({ 
             id: i, 
             role: d.role, 
             text: d.suggestion,
             sentiment: analyzeSentiment(d.suggestion),
             timestamp: d.timestamp
         }));
-        setSuggestions(newSuggestions);
-        calculateSentimentStats(newSuggestions);
 
         const sStats = calculateStats(safetyVals); 
         const iStats = calculateStats(infraVals);
         const mStats = calculateStats(mentalVals); 
         const rStats = calculateStats(respectVals);
         
-        setAdvancedStats([
+        const newAdvancedStats = [
             { metric: "Segurança", ...sStats, interpretation: interpretStdDev(sStats.stdDev) }, 
             { metric: "Infraestrutura", ...iStats, interpretation: interpretStdDev(iStats.stdDev) }, 
             { metric: "Saúde Mental", ...mStats, interpretation: interpretStdDev(mStats.stdDev) }, 
             { metric: "Respeito", ...rStats, interpretation: interpretStdDev(rStats.stdDev) }
-        ]);
+        ];
 
-        // Auto trigger AI if data loaded
-        handleGenerateAnalysis(newStats, newSuggestions, newSuggestions.length > 0 ? {
-            positive: 0, neutral: 0, negative: 0, counts: {} // Will be recalculated inside function if passed, but here we trigger effect
-        } as any : sentimentStats);
-
-    }, [data]);
-
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target?.result as string;
-            const rows = parseCSV(text);
-            const parsedData = processCSVData(rows);
-            setData(parsedData);
+        // Sentiment Stats
+        const counts: Record<string, number> = { Positivo: 0, Neutro: 0, Negativo: 0 };
+        newSuggestions.forEach(s => { if (counts[s.sentiment] !== undefined) counts[s.sentiment]++; });
+        const totalSug = newSuggestions.length;
+        const newSentimentStats = {
+            positive: totalSug ? Math.round((counts.Positivo / totalSug) * 100) : 0,
+            neutral: totalSug ? Math.round((counts.Neutro / totalSug) * 100) : 0,
+            negative: totalSug ? Math.round((counts.Negativo / totalSug) * 100) : 0,
+            counts
         };
-        reader.readAsText(file);
+
+        return {
+            id: Date.now().toString() + Math.random().toString(),
+            name: name.replace('.csv', ''),
+            uploadDate: new Date(),
+            data: parsedData,
+            stats: newStats,
+            chartData: { radar, safety },
+            suggestions: newSuggestions,
+            advancedStats: newAdvancedStats,
+            sentimentStats: newSentimentStats
+        };
+    };
+
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        const newDatasets: Dataset[] = [];
+        
+        // Process files sequentially to ensure state stability (or Promise.all)
+        const fileReaders: Promise<Dataset>[] = Array.from(files).map((fileItem) => {
+            const file = fileItem as File;
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const text = e.target?.result as string;
+                    const dataset = processRawDataToDataset(file.name, text);
+                    resolve(dataset);
+                };
+                reader.readAsText(file);
+            });
+        });
+
+        const results = await Promise.all(fileReaders);
+        
+        // Update datasets
+        setDatasets(prev => [...prev, ...results]);
+        
+        // If it was the first real upload (replacing demo) or just switch to the latest
+        if (results.length > 0) {
+            setActiveDatasetId(results[results.length - 1].id);
+            // Trigger AI for the new active dataset
+            const ds = results[results.length - 1];
+            handleGenerateAnalysis(ds.stats, ds.suggestions, ds.sentimentStats);
+        }
     };
 
     const handleGenerateAnalysis = async (currentStats = stats, currentSuggestions = suggestions, currentSentiments = sentimentStats) => {
@@ -241,7 +277,7 @@ const App: React.FC = () => {
         
         doc.setFont("times", "bold"); 
         doc.setFontSize(14); 
-        doc.text("RELATÓRIO DE CLIMA ESCOLAR", 10.5, y, { align: "center" }); 
+        doc.text(`RELATÓRIO DE CLIMA ESCOLAR - ${activeDataset.name}`, 10.5, y, { align: "center" }); 
         y += 1.5;
         
         doc.setFontSize(12); 
@@ -287,7 +323,7 @@ const App: React.FC = () => {
             }); 
         }
         
-        doc.save("Relatorio_Completo_ABNT.pdf");
+        doc.save(`Relatorio_${activeDataset.name}.pdf`);
         setGeneratingPdf(false);
     };
 
@@ -304,7 +340,7 @@ const App: React.FC = () => {
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "sugestoes_filtradas.csv");
+        link.setAttribute("download", `sugestoes_${activeDataset.name}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -318,6 +354,140 @@ const App: React.FC = () => {
 
     // --- VIEW SUB-COMPONENTS ---
     
+    const ComparisonView = () => {
+        if (datasets.length < 2) {
+            return (
+                <div className="flex flex-col items-center justify-center h-[500px] bg-[#1e293b] rounded-3xl border border-slate-800 border-dashed animate-in">
+                    <div className="p-5 bg-slate-900 rounded-full mb-4 shadow-lg"><Layers size={40} className="text-slate-500" /></div>
+                    <h3 className="text-xl font-bold text-white mb-2">Modo de Comparação</h3>
+                    <p className="text-slate-400 max-w-md text-center">
+                        Para habilitar a comparação profissional, importe pelo menos dois arquivos CSV diferentes (ex: "Pesquisa 2023" e "Pesquisa 2024").
+                    </p>
+                </div>
+            );
+        }
+
+        const colors = ['#3b82f6', '#10b981', '#f97316', '#a855f7', '#ec4899'];
+
+        // Prepare Data for Comparison Bar Chart (KPIs)
+        const kpiComparisonData = [
+            { name: 'Segurança', key: 'avgSafety' },
+            { name: 'Infraestrutura', key: 'avgFacilities' },
+            { name: 'Saúde Mental', key: 'avgMentalHealth' },
+        ].map(metric => {
+            const dataPoint: any = { name: metric.name };
+            datasets.forEach((ds, idx) => {
+                dataPoint[ds.name] = parseFloat(ds.stats[metric.key as keyof Stats] as string);
+            });
+            return dataPoint;
+        });
+
+        // Prepare Data for Radar Comparison
+        // We need to merge the radar data from all datasets based on 'subject'
+        // Assuming all datasets have the same subjects
+        const subjects = datasets[0].chartData.radar.map(r => r.subject);
+        const radarComparisonData = subjects.map(subj => {
+            const point: any = { subject: subj, fullMark: 5 };
+            datasets.forEach((ds) => {
+                const metric = ds.chartData.radar.find(r => r.subject === subj);
+                point[ds.name] = metric ? metric.A : 0;
+            });
+            return point;
+        });
+
+        return (
+            <div className="animate-in space-y-8">
+                <div className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-xl">
+                     <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                         <GitCompare size={28} className="text-cyan-400" /> Comparativo de Datasets
+                     </h2>
+                     
+                     {/* Summary Table */}
+                     <div className="overflow-x-auto mb-10 rounded-xl border border-slate-700">
+                        <table className="w-full text-left text-sm text-slate-400">
+                             <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider">
+                                 <tr>
+                                     <th className="px-6 py-4">Indicador</th>
+                                     {datasets.map((ds, idx) => (
+                                         <th key={ds.id} className="px-6 py-4" style={{ color: colors[idx % colors.length] }}>
+                                             {ds.name}
+                                         </th>
+                                     ))}
+                                 </tr>
+                             </thead>
+                             <tbody className="divide-y divide-slate-800 bg-slate-900/50">
+                                 <tr>
+                                     <td className="px-6 py-4 font-bold text-white">Total Respondentes</td>
+                                     {datasets.map(ds => <td key={ds.id} className="px-6 py-4">{ds.stats.total}</td>)}
+                                 </tr>
+                                 <tr>
+                                     <td className="px-6 py-4 font-bold text-white">Segurança (0-5)</td>
+                                     {datasets.map(ds => <td key={ds.id} className="px-6 py-4 font-mono">{ds.stats.avgSafety}</td>)}
+                                 </tr>
+                                 <tr>
+                                     <td className="px-6 py-4 font-bold text-white">Violência (%)</td>
+                                     {datasets.map(ds => <td key={ds.id} className="px-6 py-4 font-mono">{ds.stats.violencePerc}%</td>)}
+                                 </tr>
+                                 <tr>
+                                     <td className="px-6 py-4 font-bold text-white">Saúde Mental (0-5)</td>
+                                     {datasets.map(ds => <td key={ds.id} className="px-6 py-4 font-mono">{ds.stats.avgMentalHealth}</td>)}
+                                 </tr>
+                             </tbody>
+                        </table>
+                     </div>
+
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                         {/* KPI Evolution Chart */}
+                         <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700">
+                            <h3 className="text-white font-bold mb-4">Evolução dos Indicadores Chave</h3>
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={kpiComparisonData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} domain={[0, 5]} />
+                                        <RechartsTooltip content={<DarkTooltip />} cursor={{fill: '#334155', opacity: 0.3}} />
+                                        <Legend />
+                                        {datasets.map((ds, idx) => (
+                                            <Bar key={ds.id} dataKey={ds.name} fill={colors[idx % colors.length]} radius={[4, 4, 0, 0]} barSize={20} />
+                                        ))}
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                         </div>
+
+                         {/* Radar Overlay Chart */}
+                         <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700">
+                            <h3 className="text-white font-bold mb-4">Sobreposição de Clima (Radar)</h3>
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarComparisonData}>
+                                        <PolarGrid stroke="#334155" />
+                                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                                        <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                                        <RechartsTooltip content={<DarkTooltip />} />
+                                        <Legend />
+                                        {datasets.map((ds, idx) => (
+                                            <Radar 
+                                                key={ds.id} 
+                                                name={ds.name} 
+                                                dataKey={ds.name} 
+                                                stroke={colors[idx % colors.length]} 
+                                                strokeWidth={2} 
+                                                fill={colors[idx % colors.length]} 
+                                                fillOpacity={0.1} 
+                                            />
+                                        ))}
+                                    </RadarChart>
+                                </ResponsiveContainer>
+                            </div>
+                         </div>
+                     </div>
+                </div>
+            </div>
+        );
+    };
+
     const DashboardView = () => {
         // Logic for Radar Explanations
         const criticalAreas = chartData.radar.filter(r => Number(r.A) < 2.5).map(r => r.subject);
@@ -592,7 +762,7 @@ const App: React.FC = () => {
             { name: 'Negativo', value: filteredReportSuggestions.filter(s => s.sentiment === 'Negativo').length, color: '#f87171' },
         ].filter(d => d.value > 0);
 
-        // Bar Chart Data (Role Sentiment Distribution) - Updated to handle both "Todos" and specific role
+        // Bar Chart Data (Role Sentiment Distribution)
         const roleSentimentData = useMemo(() => {
             const rolesToProcess = reportRoleFilter === 'Todos' 
                 ? [...new Set(suggestions.map(s => s.role))] 
@@ -624,12 +794,10 @@ const App: React.FC = () => {
         const criticalPointsSection = React.useMemo(() => {
             if (!analysis) return null;
             // Regex to match "## ... Pontos Críticos" or similar headers, capturing everything AFTER the header until the next "##"
-            // Capturing group ([\s\S]*?) contains the table content.
             const match = analysis.match(/##\s*[^\n]*(Pontos Críticos|Vulnerabilidades Críticas)([\s\S]*?)(?=\n##|$)/i);
             
             if (match && match[2]) {
                 // Return only the content (match[2]) prefixed with newlines to ensure Markdown table renders correctly
-                // stripping the header "## ..." because we display our own header in the UI
                 return "\n\n" + match[2].trim();
             }
             return null;
@@ -914,6 +1082,26 @@ const App: React.FC = () => {
                     <p>As configurações da API Key agora são gerenciadas via variáveis de ambiente do sistema (Vercel).</p>
                     <p className="mt-2 text-sm text-slate-500">API_KEY configurada no backend.</p>
                  </div>
+                 
+                 <div className="mt-8 pt-8 border-t border-slate-800">
+                     <h3 className="text-xl font-bold text-white mb-4">Gerenciamento de Dados</h3>
+                     <ul className="space-y-3">
+                        {datasets.map(ds => (
+                            <li key={ds.id} className="flex items-center justify-between p-4 bg-slate-900 rounded-xl border border-slate-700">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-slate-800 rounded-lg text-slate-400"><FileText size={18} /></div>
+                                    <div>
+                                        <p className="text-white font-bold">{ds.name}</p>
+                                        <p className="text-xs text-slate-500">{ds.uploadDate.toLocaleDateString()} • {ds.stats.total} registros</p>
+                                    </div>
+                                </div>
+                                {ds.id === activeDatasetId && (
+                                    <span className="px-2 py-1 bg-cyan-900/30 text-cyan-400 rounded-full text-xs font-bold border border-cyan-800">Ativo</span>
+                                )}
+                            </li>
+                        ))}
+                     </ul>
+                 </div>
              </div>
         </div>
     );
@@ -927,17 +1115,38 @@ const App: React.FC = () => {
                         <div>
                             <h1 className="text-4xl font-black text-white tracking-tight mb-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
                                 {activeTab === 'dashboard' && 'Visão Geral'}
+                                {activeTab === 'compare' && 'Comparação Profissional'}
                                 {activeTab === 'stats' && 'Estatística Avançada'}
                                 {activeTab === 'reports' && 'Relatórios Detalhados'}
                                 {activeTab === 'settings' && 'Preferências'}
                             </h1>
                             <p className="text-slate-400 font-medium">Monitorização estratégica em tempo real.</p>
                         </div>
-                        <div className="flex gap-3">
+                        <div className="flex gap-3 items-center">
+                            {/* Dataset Selector */}
+                            <div className="relative">
+                                <select 
+                                    value={activeDatasetId} 
+                                    onChange={(e) => setActiveDatasetId(e.target.value)}
+                                    className="appearance-none bg-slate-800 border border-slate-700 text-white pl-4 pr-10 py-3 rounded-xl font-bold cursor-pointer hover:bg-slate-700 transition-colors shadow-lg"
+                                >
+                                    {datasets.map(ds => (
+                                        <option key={ds.id} value={ds.id}>{ds.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+
                             <div className="relative group">
-                                <input type="file" accept=".csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                                <button className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-3 rounded-xl border border-slate-700 font-bold transition-all shadow-lg hover:shadow-cyan-500/10">
-                                    <Upload size={18} /> <span className="hidden sm:inline">Importar</span>
+                                <input 
+                                    type="file" 
+                                    accept=".csv" 
+                                    multiple 
+                                    onChange={handleFileUpload} 
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                />
+                                <button className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white px-5 py-3 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(6,182,212,0.5)]">
+                                    <Upload size={18} /> <span className="hidden sm:inline">Carregar CSVs</span>
                                 </button>
                             </div>
                             <button onClick={downloadPDF} className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-3 rounded-xl border border-slate-700 font-bold transition-all shadow-lg hover:shadow-cyan-500/10">
@@ -946,6 +1155,7 @@ const App: React.FC = () => {
                         </div>
                     </div>
                     {activeTab === 'dashboard' && <DashboardView />}
+                    {activeTab === 'compare' && <ComparisonView />}
                     {activeTab === 'stats' && <AdvancedStatsView />}
                     {activeTab === 'reports' && <ReportsView />}
                     {activeTab === 'settings' && <SettingsView />}
