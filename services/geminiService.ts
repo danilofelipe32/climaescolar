@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { Stats, SentimentStats, Suggestion } from '../types';
 
@@ -27,12 +28,15 @@ export const generateSchoolReport = async (
 
     TAREFA:
     Gere um Diagnóstico Executivo curto e direto em MARKDOWN.
-    Use tabelas Markdown padrão para os Pontos Críticos.
-    Use listas com bullets para o Plano de Ação.
+    
+    REGRAS DE FORMATAÇÃO ESTRITAS:
+    1. Use a sintaxe de citação (>) para criar um BLOCO DE DESTAQUE para o resumo executivo ou alertas de vulnerabilidade crítica.
+    2. Os "Pontos Críticos" DEVEM ser apresentados obrigatoriamente em uma TABELA Markdown.
+    3. O Plano de Ação deve ser uma lista com bullet points.
     
     ESTRUTURA DESEJADA:
     ## Título da Seção (Use emojis)
-    Texto do diagnóstico...
+    > Resumo executivo em bloco de destaque...
     
     ## Pontos Críticos (Tabela)
     | Área | Score | Impacto |

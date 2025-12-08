@@ -137,22 +137,32 @@ export const MarkdownRenderers = {
     p: ({node, ...props}: any) => <p className="text-slate-300 mb-4 leading-relaxed text-sm text-justify" {...props} />,
     ul: ({node, ...props}: any) => <ul className="space-y-3 mb-6" {...props} />,
     li: ({node, ...props}: any) => (
-        <li className="flex items-start gap-3 bg-slate-800/40 p-3 rounded-xl border border-slate-700/50 hover:bg-slate-800/60 transition-colors">
-            <div className="mt-1 w-5 h-5 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center shrink-0">
+        <li className="flex items-start gap-3 bg-slate-800/40 p-3 rounded-xl border border-slate-700/50 hover:bg-slate-800/60 transition-colors mb-2">
+            <div className="mt-1 w-5 h-5 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center shrink-0 border border-green-500/30">
                 <span className="w-1.5 h-1.5 bg-green-400 rounded-full shadow-[0_0_5px_currentColor]"></span>
             </div>
             <span className="text-slate-300 text-sm flex-1">{props.children}</span>
         </li>
     ),
     strong: ({node, ...props}: any) => <strong className="text-white font-bold" {...props} />,
+    
+    // Colored Block for Blockquotes
+    blockquote: ({node, ...props}: any) => (
+        <div className="border-l-4 border-red-500 bg-red-900/10 p-4 rounded-r-xl my-6 flex gap-4 items-start">
+             <AlertTriangle className="text-red-500 shrink-0 mt-1" size={20} />
+             <div className="text-slate-200 italic text-sm">{props.children}</div>
+        </div>
+    ),
+    
+    // Enhanced Tables
     table: ({node, ...props}: any) => (
         <div className="overflow-hidden rounded-xl border border-slate-700 shadow-xl my-6">
             <table className="w-full text-left text-sm bg-slate-900/50" {...props} />
         </div>
     ),
-    thead: ({node, ...props}: any) => <thead className="bg-slate-950 text-slate-400 uppercase text-xs font-bold tracking-wider" {...props} />,
+    thead: ({node, ...props}: any) => <thead className="bg-slate-950 text-slate-400 uppercase text-xs font-bold tracking-wider border-b border-slate-700" {...props} />,
     tbody: ({node, ...props}: any) => <tbody className="divide-y divide-slate-800" {...props} />,
     tr: ({node, ...props}: any) => <tr className="hover:bg-slate-800/50 transition-colors group" {...props} />,
-    th: ({node, ...props}: any) => <th className="px-6 py-4 font-bold border-b border-slate-800" {...props} />,
-    td: ({node, ...props}: any) => <td className="px-6 py-4 text-slate-300 align-top group-hover:text-white transition-colors" {...props} />,
+    th: ({node, ...props}: any) => <th className="px-6 py-4 font-bold text-cyan-500/80" {...props} />,
+    td: ({node, ...props}: any) => <td className="px-6 py-4 text-slate-300 align-top group-hover:text-white transition-colors leading-relaxed" {...props} />,
 };

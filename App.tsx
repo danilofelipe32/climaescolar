@@ -48,7 +48,7 @@ const REPORT_ADVANCED_STATS: AdvancedStat[] = [
 const REPORT_AI_ANALYSIS = `
 ## 📊 Diagnóstico Executivo
 
-O clima escolar encontra-se em um estado de **vulnerabilidade crítica**.
+> O clima escolar encontra-se em um estado de **vulnerabilidade crítica**. A percepção de segurança não condiz com os indicadores de violência.
 
 ## 🚩 Matriz de Risco
 
@@ -56,11 +56,13 @@ O clima escolar encontra-se em um estado de **vulnerabilidade crítica**.
 | :--- | :---: | :--- |
 | **Apoio Psicossocial** | **0.4** | Ausência total de escuta; risco alto de crises emocionais. |
 | **Infraestrutura** | **1.2** | Ambiente degradado (limpeza, trancas) gera sensação de abandono. |
+| **Controle de Acesso** | **0.0** | Falha grave na portaria (percepção de visitantes/externos). |
 
 ## 💡 Plano de Ação Imediato
 
 * **Protocolo de Escuta Ativa:** Manter a sala do núcleo aberta diariamente.
-* **Mutirão de Segurança:** Reparo imediato de fechaduras.
+* **Mutirão de Segurança:** Reparo imediato de fechaduras e trancas.
+* **Revisão de Portaria:** Treinamento e controle rigoroso de acesso.
 `;
 
 const App: React.FC = () => {
@@ -797,6 +799,12 @@ const App: React.FC = () => {
                                         </th>
                                         <th 
                                             className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-white transition-colors select-none"
+                                            onClick={() => requestSort('timestamp')}
+                                        >
+                                            <div className="flex items-center">Data {renderSortIcon('timestamp')}</div>
+                                        </th>
+                                        <th 
+                                            className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-white transition-colors select-none"
                                             onClick={() => requestSort('sentiment')}
                                         >
                                             <div className="flex items-center">Sentimento {renderSortIcon('sentiment')}</div>
@@ -821,6 +829,7 @@ const App: React.FC = () => {
                                             }`}
                                         >
                                             <td className="px-6 py-5 w-48 align-top"><span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border ${sug.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : sug.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{sug.role}</span></td>
+                                            <td className="px-6 py-5 w-32 text-slate-400 font-mono text-xs">{sug.timestamp || '-'}</td>
                                             <td className="px-6 py-5 w-32"><span className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold border ${sug.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : sug.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{sug.sentiment}</span></td>
                                             <td className="px-6 py-5 text-slate-300 leading-relaxed group-hover:text-white transition-colors line-clamp-2 max-w-md">{sug.text}</td>
                                             <td className="px-6 py-5 text-right align-top">
@@ -833,7 +842,7 @@ const App: React.FC = () => {
                                                 </button>
                                             </td>
                                         </tr>
-                                    ))) : (<tr><td colSpan={4} className="px-6 py-12 text-center text-slate-600 italic">Nenhum dado disponível.</td></tr>)}
+                                    ))) : (<tr><td colSpan={5} className="px-6 py-12 text-center text-slate-600 italic">Nenhum dado disponível.</td></tr>)}
                                 </tbody>
                             </table>
                         </div>
@@ -859,6 +868,7 @@ const App: React.FC = () => {
                                     <div className="flex gap-4 mb-6">
                                        <span className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-bold border ${selectedSuggestion.role.includes('Aluno') ? 'bg-blue-950 text-blue-400 border-blue-900' : selectedSuggestion.role.includes('Professor') ? 'bg-green-950 text-green-400 border-green-900' : 'bg-orange-950 text-orange-400 border-orange-900'}`}>{selectedSuggestion.role}</span>
                                        <span className={`px-3 py-1 rounded-full text-xs uppercase font-bold border flex items-center ${selectedSuggestion.sentiment === 'Positivo' ? 'bg-green-900/30 text-green-400 border-green-800' : selectedSuggestion.sentiment === 'Negativo' ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>{selectedSuggestion.sentiment}</span>
+                                       <span className="px-3 py-1 rounded-full text-xs font-mono font-bold border bg-slate-800 text-slate-400 border-slate-700 flex items-center">{selectedSuggestion.timestamp || 'Sem data'}</span>
                                     </div>
 
                                     <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-800">
