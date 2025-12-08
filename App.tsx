@@ -13,7 +13,8 @@ import {
     Shield, School, MessageSquare, AlertTriangle, Upload, FileText, Heart, Activity, 
     CheckCircle, Sparkles, BrainCircuit, FileDown, Loader2, Calculator, Settings,
     Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet, BarChart3, Eye, X,
-    ArrowUpDown, ArrowUp, ArrowDown, Calendar, GitCompare, Layers, TrendingUp, TrendingDown, Minus
+    ArrowUpDown, ArrowUp, ArrowDown, Calendar, GitCompare, Layers, TrendingUp, TrendingDown, Minus,
+    Target, Sliders, AlertCircle
 } from 'lucide-react';
 
 import { Sidebar, KpiCard, SuggestionCard, DarkTooltip, MarkdownRenderers } from './components/Components';
@@ -113,6 +114,15 @@ const App: React.FC = () => {
     const [loadingCompAI, setLoadingCompAI] = useState(false);
     const [errorAI, setErrorAI] = useState<string | null>(null);
     const [generatingPdf, setGeneratingPdf] = useState(false);
+
+    // Threshold State
+    const [thresholds, setThresholds] = useState({
+        safety: 3.5,
+        facilities: 3.0,
+        mentalHealth: 3.0,
+        respect: 3.0,
+        violence: 15.0
+    });
 
     // Derived active data for current view
     const activeDataset = useMemo(() => 
@@ -905,29 +915,156 @@ const App: React.FC = () => {
         );
     };
 
-    const AdvancedStatsView = () => (
-        <div className="animate-in space-y-8">
-            <div className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-xl">
-                <h2 className="text-3xl font-bold text-white mb-6 flex items-center gap-3"><Calculator size={32} className="text-purple-400" /> Estatística Descritiva Robusta</h2>
-                <div className="grid grid-cols-1 gap-6">
-                    {advancedStats.map((stat, idx) => (
-                        <div key={idx} className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700 hover:border-purple-500/30 transition-colors">
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-                                <h3 className="text-xl font-bold text-white flex items-center gap-2"><div className="w-2 h-8 bg-purple-500 rounded-full"></div>{stat.metric}</h3>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${stat.stdDev < 0.8 ? 'bg-green-900/30 text-green-400 border border-green-800' : stat.stdDev < 1.3 ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-800' : 'bg-red-900/30 text-red-400 border border-red-800'}`}>{stat.interpretation}</span>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800"><div className="text-slate-500 text-xs font-bold uppercase mb-1">Média</div><div className="text-2xl font-mono text-white">{stat.mean.toFixed(2)}</div></div>
-                                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800"><div className="text-slate-500 text-xs font-bold uppercase mb-1">Mediana</div><div className="text-2xl font-mono text-white">{stat.median.toFixed(2)}</div></div>
-                                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800"><div className="text-slate-500 text-xs font-bold uppercase mb-1">Moda</div><div className="text-2xl font-mono text-white">{stat.mode}</div></div>
-                                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800"><div className="text-slate-500 text-xs font-bold uppercase mb-1">Desvio Padrão</div><div className="text-2xl font-mono text-purple-400">{stat.stdDev.toFixed(2)}</div></div>
+    const AdvancedStatsView = () => {
+        const [showSettings, setShowSettings] = useState(false);
+        
+        // Helper to check threshold violation
+        const getThresholdStatus = (metric: string, value: number) => {
+            let limit = 0;
+            let isMax = false; // true if exceeding limit is bad
+            let target = 0;
+
+            if (metric === 'Segurança') { limit = thresholds.safety; target = thresholds.safety; }
+            else if (metric === 'Infraestrutura') { limit = thresholds.facilities; target = thresholds.facilities; }
+            else if (metric === 'Saúde Mental') { limit = thresholds.mentalHealth; target = thresholds.mentalHealth; }
+            else if (metric === 'Respeito') { limit = thresholds.respect; target = thresholds.respect; }
+            else if (metric === 'Violência') { limit = thresholds.violence; isMax = true; target = thresholds.violence; }
+            else return null;
+
+            const isViolation = isMax ? value > limit : value < limit;
+            return { isViolation, limit, isMax };
+        };
+
+        const StatCard: React.FC<{ stat: AdvancedStat }> = ({ stat }) => {
+            const status = getThresholdStatus(stat.metric, stat.mean);
+            const isCritical = status?.isViolation;
+            
+            return (
+                <div className={`p-6 rounded-2xl border transition-all duration-300 ${isCritical ? 'bg-red-950/20 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-slate-900/50 border-slate-700 hover:border-purple-500/30'}`}>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className={`w-2 h-8 rounded-full ${isCritical ? 'bg-red-500' : 'bg-purple-500'}`}></div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">{stat.metric}</h3>
+                                {status && (
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                        {isCritical ? <AlertCircle size={12} className="text-red-400" /> : <CheckCircle size={12} className="text-green-400" />}
+                                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isCritical ? 'text-red-400' : 'text-slate-500'}`}>
+                                            Meta: {status.isMax ? '<' : '>'}{status.limit.toFixed(1)} {stat.metric === 'Violência' && '%'}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         </div>
-                    ))}
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${stat.stdDev < 0.8 ? 'bg-green-900/30 text-green-400 border border-green-800' : stat.stdDev < 1.3 ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-800' : 'bg-red-900/30 text-red-400 border border-red-800'}`}>{stat.interpretation}</span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 relative overflow-hidden group">
+                            <div className="relative z-10">
+                                <div className="text-slate-500 text-xs font-bold uppercase mb-1">Média</div>
+                                <div className={`text-2xl font-mono ${isCritical ? 'text-red-400' : 'text-white'}`}>{stat.mean.toFixed(2)}</div>
+                            </div>
+                            {isCritical && <div className="absolute inset-0 bg-red-500/5"></div>}
+                        </div>
+                        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800"><div className="text-slate-500 text-xs font-bold uppercase mb-1">Mediana</div><div className="text-2xl font-mono text-white">{stat.median.toFixed(2)}</div></div>
+                        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800"><div className="text-slate-500 text-xs font-bold uppercase mb-1">Moda</div><div className="text-2xl font-mono text-white">{stat.mode}</div></div>
+                        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800"><div className="text-slate-500 text-xs font-bold uppercase mb-1">Desvio Padrão</div><div className="text-2xl font-mono text-purple-400">{stat.stdDev.toFixed(2)}</div></div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Custom Card for Violence (since it's not in the standard advancedStats array usually)
+        const ViolenceCard = () => {
+             const val = parseFloat(stats.violencePerc);
+             const status = getThresholdStatus('Violência', val);
+             const isCritical = status?.isViolation;
+             
+             return (
+                <div className={`p-6 rounded-2xl border transition-all duration-300 ${isCritical ? 'bg-red-950/20 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-slate-900/50 border-slate-700 hover:border-purple-500/30'}`}>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className={`w-2 h-8 rounded-full ${isCritical ? 'bg-red-500' : 'bg-purple-500'}`}></div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">Taxa de Violência</h3>
+                                {status && (
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                        {isCritical ? <AlertCircle size={12} className="text-red-400" /> : <CheckCircle size={12} className="text-green-400" />}
+                                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isCritical ? 'text-red-400' : 'text-slate-500'}`}>
+                                            Meta: {'<'}{status.limit}%
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <span className="px-3 py-1 rounded-full text-xs font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700">Índice Global</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 relative overflow-hidden group">
+                             <div className="text-slate-500 text-xs font-bold uppercase mb-1">Percentual Reportado</div>
+                             <div className={`text-3xl font-mono ${isCritical ? 'text-red-400' : 'text-white'}`}>{stats.violencePerc}%</div>
+                         </div>
+                         <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex items-center">
+                             <p className="text-xs text-slate-500 leading-relaxed">
+                                 Este índice representa a % de respondentes que marcaram "Sim" para a presença de violência na escola.
+                             </p>
+                         </div>
+                    </div>
+                </div>
+             );
+        };
+
+        return (
+            <div className="animate-in space-y-8">
+                <div className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-xl">
+                    <div className="flex justify-between items-center mb-6">
+                         <h2 className="text-3xl font-bold text-white flex items-center gap-3"><Calculator size={32} className="text-purple-400" /> Estatística Descritiva</h2>
+                         <button 
+                            onClick={() => setShowSettings(!showSettings)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${showSettings ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/50' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                         >
+                             {showSettings ? <X size={16} /> : <Target size={16} />} Metas e Limites
+                         </button>
+                    </div>
+
+                    {showSettings && (
+                        <div className="mb-8 p-6 bg-slate-900/80 rounded-2xl border border-purple-500/30 animate-in fade-in slide-in-from-top-4">
+                            <div className="flex items-center gap-2 mb-4 text-purple-400 font-bold text-sm uppercase tracking-wider">
+                                <Sliders size={16} /> Configuração de Alertas (KPIs)
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                                {Object.entries(thresholds).map(([key, val]) => (
+                                    <div key={key} className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                        <label className="text-[10px] text-slate-500 font-bold uppercase block mb-2">
+                                            {key === 'safety' ? 'Mín. Segurança (0-5)' : 
+                                             key === 'facilities' ? 'Mín. Infra (0-5)' : 
+                                             key === 'mentalHealth' ? 'Mín. Saúde Mental (0-5)' : 
+                                             key === 'respect' ? 'Mín. Respeito (0-5)' : 
+                                             'Máx. Violência (%)'}
+                                        </label>
+                                        <input 
+                                            type="number" 
+                                            step="0.1"
+                                            value={val}
+                                            onChange={(e) => setThresholds({...thresholds, [key]: parseFloat(e.target.value) || 0})}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-sm focus:border-purple-500 focus:outline-none transition-colors"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-6">
+                        {advancedStats.map((stat, idx) => (
+                            <StatCard key={idx} stat={stat} />
+                        ))}
+                        <ViolenceCard />
+                    </div>
                 </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     const ReportsView = () => {
         const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
