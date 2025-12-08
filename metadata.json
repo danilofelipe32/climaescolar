@@ -1,0 +1,5 @@
+{
+  "name": "School Climate Dashboard",
+  "description": "An advanced analytics dashboard for school climate monitoring, featuring AI-driven insights, sentiment analysis, and PDF reporting capabilities.",
+  "requestFramePermissions": []
+}
