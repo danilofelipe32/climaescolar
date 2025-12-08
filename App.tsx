@@ -12,7 +12,8 @@ import {
 import { 
     Shield, School, MessageSquare, AlertTriangle, Upload, FileText, Heart, Activity, 
     CheckCircle, Sparkles, BrainCircuit, FileDown, Loader2, Calculator, Settings,
-    Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet, BarChart3, Eye, X
+    Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet, BarChart3, Eye, X,
+    ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 
 import { Sidebar, KpiCard, SuggestionCard, DarkTooltip, MarkdownRenderers } from './components/Components';
@@ -514,17 +515,51 @@ const App: React.FC = () => {
 
     const ReportsView = () => {
         const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
+        const [sortConfig, setSortConfig] = useState<{ key: keyof Suggestion | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
+        
         const uniqueRoles = ['Todos', ...Array.from(new Set(suggestions.map(s => s.role))).sort()];
         const filteredReportSuggestions = suggestions.filter(s => 
             (reportRoleFilter === 'Todos' || s.role === reportRoleFilter) &&
             (reportSentimentFilter === 'Todos' || s.sentiment === reportSentimentFilter)
         );
 
+        // Sorting Logic
+        const sortedSuggestions = React.useMemo(() => {
+            let sortableItems = [...filteredReportSuggestions];
+            if (sortConfig.key !== null) {
+                sortableItems.sort((a, b) => {
+                    if (a[sortConfig.key!] < b[sortConfig.key!]) {
+                        return sortConfig.direction === 'asc' ? -1 : 1;
+                    }
+                    if (a[sortConfig.key!] > b[sortConfig.key!]) {
+                        return sortConfig.direction === 'asc' ? 1 : -1;
+                    }
+                    return 0;
+                });
+            }
+            return sortableItems;
+        }, [filteredReportSuggestions, sortConfig]);
+
+        const requestSort = (key: keyof Suggestion) => {
+            let direction: 'asc' | 'desc' = 'asc';
+            if (sortConfig.key === key && sortConfig.direction === 'asc') {
+                direction = 'desc';
+            }
+            setSortConfig({ key, direction });
+        };
+
+        const renderSortIcon = (columnKey: keyof Suggestion) => {
+            if (sortConfig.key !== columnKey) return <ArrowUpDown size={14} className="ml-1 text-slate-600" />;
+            return sortConfig.direction === 'asc' 
+                ? <ArrowUp size={14} className="ml-1 text-cyan-400" /> 
+                : <ArrowDown size={14} className="ml-1 text-cyan-400" />;
+        };
+
         const handleExportCSV = () => {
             const headers = ['Role', 'Sentimento', 'Feedback'];
             const csvContent = [
                 headers.join(','),
-                ...filteredReportSuggestions.map(s => {
+                ...sortedSuggestions.map(s => {
                     const cleanText = s.text.replace(/"/g, '""'); // Escape double quotes within content
                     return `"${s.role}","${s.sentiment}","${cleanText}"`;
                 })
@@ -691,14 +726,29 @@ const App: React.FC = () => {
                             <table className="w-full text-left text-sm text-slate-400">
                                 <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider">
                                     <tr>
-                                        <th className="px-6 py-5 border-b border-slate-800">Role</th>
-                                        <th className="px-6 py-5 border-b border-slate-800">Sentimento</th>
-                                        <th className="px-6 py-5 border-b border-slate-800">Feedback</th>
+                                        <th 
+                                            className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-white transition-colors select-none"
+                                            onClick={() => requestSort('role')}
+                                        >
+                                            <div className="flex items-center">Role {renderSortIcon('role')}</div>
+                                        </th>
+                                        <th 
+                                            className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-white transition-colors select-none"
+                                            onClick={() => requestSort('sentiment')}
+                                        >
+                                            <div className="flex items-center">Sentimento {renderSortIcon('sentiment')}</div>
+                                        </th>
+                                        <th 
+                                            className="px-6 py-5 border-b border-slate-800 cursor-pointer hover:text-white transition-colors select-none"
+                                            onClick={() => requestSort('text')}
+                                        >
+                                            <div className="flex items-center">Feedback {renderSortIcon('text')}</div>
+                                        </th>
                                         <th className="px-6 py-5 border-b border-slate-800 text-right">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800">
-                                    {filteredReportSuggestions.length > 0 ? (filteredReportSuggestions.map((sug) => (
+                                    {sortedSuggestions.length > 0 ? (sortedSuggestions.map((sug) => (
                                         <tr 
                                             key={sug.id} 
                                             className={`transition-colors group ${
