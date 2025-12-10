@@ -2,17 +2,19 @@
 import { GoogleGenAI } from "@google/genai";
 import { Stats, SentimentStats, Suggestion, Dataset } from '../types';
 
-// Chave de API inserida para testes conforme solicitado
-const API_KEY = "AIzaSyC66emimXFo6BVctXpbYlheIueYSgP3ExE";
-
 export const generateSchoolReport = async (
     stats: Stats, 
     suggestions: Suggestion[], 
     sentimentStats: SentimentStats
 ): Promise<string> => {
     
-    // Configuração direta com a chave fornecida
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
+    // Validação Explícita para Debug
+    if (!process.env.API_KEY) {
+        throw new Error("A variável de ambiente 'API_KEY' não foi encontrada. Verifique as configurações do Vercel.");
+    }
+
+    // API Key must be obtained exclusively from process.env.API_KEY
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const prompt = `
     Atue como um Consultor Sênior em Psicologia Escolar e Gestão Educacional.
@@ -74,8 +76,11 @@ export const generateSchoolReport = async (
 };
 
 export const generateComparativeReport = async (datasets: Dataset[]): Promise<string> => {
-    
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
+    if (!process.env.API_KEY) {
+        throw new Error("A variável de ambiente 'API_KEY' não foi encontrada.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     // 1. Sort datasets chronologically (assuming name contains date or increasing sequence)
     // Note: The UI usually passes already sorted datasets, but we ensure sorting here just in case.
