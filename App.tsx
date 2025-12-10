@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -14,7 +13,7 @@ import {
     CheckCircle, Sparkles, BrainCircuit, FileDown, Loader2, Calculator, Settings,
     Smile, Meh, Frown, Filter, ChevronDown, Info, FileSpreadsheet, BarChart3, Eye, X,
     ArrowUpDown, ArrowUp, ArrowDown, Calendar, GitCompare, Layers, TrendingUp, TrendingDown, Minus,
-    Target, Sliders, AlertCircle
+    Target, Sliders, AlertCircle, Clock, ChevronRight, Star
 } from 'lucide-react';
 
 import { Sidebar, KpiCard, SuggestionCard, DarkTooltip, MarkdownRenderers } from './components/Components';
@@ -380,6 +379,9 @@ const App: React.FC = () => {
     // --- VIEW SUB-COMPONENTS ---
     
     const ComparisonView = () => {
+        // State for timeline control
+        const [compRange, setCompRange] = useState<{start: number, end: number} | null>(null);
+
         if (datasets.length < 2) {
             return (
                 <div className="flex flex-col items-center justify-center h-[500px] bg-[#1e293b] rounded-3xl border border-slate-800 border-dashed animate-in">
@@ -394,14 +396,26 @@ const App: React.FC = () => {
 
         const colors = ['#3b82f6', '#10b981', '#f97316', '#a855f7', '#ec4899', '#ef4444', '#06b6d4', '#84cc16'];
         
-        // Robust Sort: Numeric sort if possible, otherwise string sort. 
-        // Important for timeline accuracy.
+        // Robust Sort
         const sortedDatasets = useMemo(() => {
             return [...datasets].sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
         }, [datasets]);
 
-        // Prepare Trend Data (Line Charts)
-        const trendData = sortedDatasets.map(ds => ({
+        // Initialize range on load or dataset change
+        useEffect(() => {
+            if (!compRange && sortedDatasets.length > 0) {
+                setCompRange({ start: 0, end: sortedDatasets.length - 1 });
+            }
+        }, [sortedDatasets.length, compRange]);
+
+        // Active Range Slicing
+        const activeComparisonDatasets = useMemo(() => {
+            if (!compRange) return sortedDatasets;
+            return sortedDatasets.slice(compRange.start, compRange.end + 1);
+        }, [sortedDatasets, compRange]);
+
+        // Prepare Trend Data (Line Charts) based on SLICED data
+        const trendData = activeComparisonDatasets.map(ds => ({
             name: ds.name,
             Safety: parseFloat(ds.stats.avgSafety),
             Facilities: parseFloat(ds.stats.avgFacilities),
@@ -410,49 +424,48 @@ const App: React.FC = () => {
             PositiveSent: ds.sentimentStats.positive
         }));
 
-        // Prepare Radar Comparison Data
+        // Prepare Radar Data based on SLICED data
         const subjects = datasets[0].chartData.radar.map(r => r.subject);
         const radarComparisonData = subjects.map(subj => {
             const point: any = { subject: subj, fullMark: 5 };
-            datasets.forEach((ds) => {
+            activeComparisonDatasets.forEach((ds) => {
                 const metric = ds.chartData.radar.find(r => r.subject === subj);
                 point[ds.name] = metric ? metric.A : 0;
             });
             return point;
         });
 
-        // Delta Calculation Helper
+        // Delta Calculation
         const getDelta = (curr: number, prev: number, inverse = false) => {
             if (isNaN(curr) || isNaN(prev) || prev === 0) return null;
             const diff = curr - prev;
             const percent = (diff / prev) * 100;
-            // Good if: (not inverse AND increased) OR (inverse AND decreased)
             const isGood = inverse ? diff < 0 : diff > 0;
-            const isNeutral = Math.abs(diff) < 0.05; // Tolerance
+            const isNeutral = Math.abs(diff) < 0.05; 
             return { diff, percent, isGood, isNeutral };
         };
 
-        // Last two datasets for delta cards
-        const currDS = sortedDatasets[sortedDatasets.length - 1];
-        const prevDS = sortedDatasets[sortedDatasets.length - 2];
+        const hasEnoughData = activeComparisonDatasets.length >= 2;
+        const currDS = activeComparisonDatasets[activeComparisonDatasets.length - 1];
+        const prevDS = hasEnoughData ? activeComparisonDatasets[activeComparisonDatasets.length - 2] : currDS;
 
-        // Overall Win/Loss Calculation
-        const wins = [
-            getDelta(parseFloat(currDS.stats.avgSafety), parseFloat(prevDS.stats.avgSafety)),
-            getDelta(parseFloat(currDS.stats.avgFacilities), parseFloat(prevDS.stats.avgFacilities)),
-            getDelta(parseFloat(currDS.stats.avgMentalHealth), parseFloat(prevDS.stats.avgMentalHealth)),
-            getDelta(parseFloat(currDS.stats.violencePerc), parseFloat(prevDS.stats.violencePerc), true), // Inverse
-        ].filter(d => d && d.isGood && !d.isNeutral).length;
-        
-        const losses = [
-            getDelta(parseFloat(currDS.stats.avgSafety), parseFloat(prevDS.stats.avgSafety)),
-            getDelta(parseFloat(currDS.stats.avgFacilities), parseFloat(prevDS.stats.avgFacilities)),
-            getDelta(parseFloat(currDS.stats.avgMentalHealth), parseFloat(prevDS.stats.avgMentalHealth)),
-            getDelta(parseFloat(currDS.stats.violencePerc), parseFloat(prevDS.stats.violencePerc), true), // Inverse
-        ].filter(d => d && !d.isGood && !d.isNeutral).length;
+        // Wins/Losses Calculation
+        let wins = 0; 
+        let losses = 0;
+
+        if (hasEnoughData) {
+            const comparisons = [
+                getDelta(parseFloat(currDS.stats.avgSafety), parseFloat(prevDS.stats.avgSafety)),
+                getDelta(parseFloat(currDS.stats.avgFacilities), parseFloat(prevDS.stats.avgFacilities)),
+                getDelta(parseFloat(currDS.stats.avgMentalHealth), parseFloat(prevDS.stats.avgMentalHealth)),
+                getDelta(parseFloat(currDS.stats.violencePerc), parseFloat(prevDS.stats.violencePerc), true),
+            ];
+            wins = comparisons.filter(d => d && d.isGood && !d.isNeutral).length;
+            losses = comparisons.filter(d => d && !d.isGood && !d.isNeutral).length;
+        }
 
         const DeltaCard = ({ title, curr, prev, unit = "", inverse = false, icon: Icon }: any) => {
-            const delta = getDelta(parseFloat(curr), parseFloat(prev), inverse);
+            const delta = hasEnoughData ? getDelta(parseFloat(curr), parseFloat(prev), inverse) : null;
             return (
                 <div className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition-colors">
                      <div className="flex justify-between items-start mb-2">
@@ -469,241 +482,369 @@ const App: React.FC = () => {
                              <span className="text-slate-600 font-medium ml-1">vs anterior</span>
                          </div>
                      ) : (
-                        <div className="text-xs text-slate-600 font-medium">- sem dados ant. -</div>
+                        <div className="text-xs text-slate-600 font-medium">- dados insuficientes -</div>
                      )}
                 </div>
             );
         };
 
-        // Heatmap Cell Helper
-        const HeatmapCell = ({ val, allVals, inverse = false }: any) => {
+        const HeatmapCell = ({ val, allVals, inverse = false, periodName, metricLabel }: any) => {
              const num = parseFloat(val);
-             const max = Math.max(...allVals);
-             const min = Math.min(...allVals);
+             const validVals = allVals.filter((v: number) => !isNaN(v));
+             const max = validVals.length > 0 ? Math.max(...validVals) : 0;
+             const min = validVals.length > 0 ? Math.min(...validVals) : 0;
              const isEqual = max === min;
-
-             // Logic: If inverse (e.g. violence), Lowest is Best.
+             
+             // Logic: Normal (Higher is good), Inverse (Lower is good)
              const isBest = inverse ? num === min : num === max;
              const isWorst = inverse ? num === max : num === min;
-
-             if (isEqual) return <span className="text-slate-500 font-mono">{val}</span>;
-
-             if (isBest) return (
-                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-500/10 border border-green-500/20 text-green-400 font-bold font-mono text-xs">
-                     {val} <Sparkles size={10} strokeWidth={3} />
-                 </div>
-             );
              
-             if (isWorst) return (
-                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 font-bold font-mono text-xs">
-                     {val} <AlertTriangle size={10} strokeWidth={3} />
+             let content = <span className="text-slate-500 font-mono font-medium">{val}</span>;
+             let contextMessage = "Desempenho dentro da média do período.";
+             
+             if (!isEqual && isBest) {
+                 content = (
+                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 font-bold font-mono text-sm shadow-[0_0_10px_rgba(74,222,128,0.1)]">
+                         {val} <Star size={12} fill="currentColor" className="opacity-80" />
+                     </div>
+                 );
+                 contextMessage = `Melhor desempenho histórico em ${metricLabel}.`;
+             } else if (!isEqual && isWorst) {
+                 content = (
+                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 font-bold font-mono text-sm shadow-[0_0_10px_rgba(248,113,113,0.1)]">
+                         {val} <AlertTriangle size={12} strokeWidth={2.5} />
+                     </div>
+                 );
+                 contextMessage = `Ponto de atenção crítico em ${metricLabel}.`;
+             } else if (validVals.length === 0) {
+                 content = <span className="text-slate-500">-</span>;
+                 contextMessage = "Sem dados suficientes.";
+             }
+
+             return (
+                 <div className="relative group flex justify-center items-center w-full h-full cursor-help">
+                     {content}
+                     
+                     {/* Tooltip */}
+                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-slate-950 border border-slate-700 p-3 rounded-xl shadow-2xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200 transform scale-95 group-hover:scale-100">
+                         <div className="text-[10px] uppercase font-bold text-slate-500 mb-1 tracking-wider">{periodName}</div>
+                         <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
+                             <span className="text-xs font-semibold text-slate-300">{metricLabel}</span>
+                             <span className={`font-mono font-bold ${isBest ? 'text-green-400' : isWorst ? 'text-red-400' : 'text-white'}`}>{val}</span>
+                         </div>
+                         <div className="text-[11px] leading-tight text-slate-400 font-medium italic">
+                             {contextMessage}
+                         </div>
+                         
+                         {/* Arrow */}
+                         <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-slate-950 border-r border-b border-slate-700 transform rotate-45"></div>
+                     </div>
                  </div>
              );
-
-             return <span className="text-slate-400 font-mono">{val}</span>;
         };
 
         return (
             <div className="animate-in space-y-8 pb-20">
-                {/* Header Section */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl">
-                     <div>
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                             <GitCompare size={28} className="text-cyan-400" /> Comparativo Evolutivo
-                        </h2>
-                        <p className="text-slate-400 text-sm mt-1">
-                            Análise temporal: <strong className="text-white">{sortedDatasets[0].name}</strong> ➔ <strong className="text-white">{currDS.name}</strong>
-                        </p>
-                     </div>
-                     
-                     {!loadingCompAI ? (
-                        <button 
-                            onClick={() => handleGenerateComparativeAnalysis(sortedDatasets)}
-                            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-purple-900/50 active:scale-95 transition-all"
-                        >
-                            <Sparkles size={16} /> Gerar Inteligência Comparativa
-                        </button>
-                     ) : (
-                        <div className="flex items-center gap-2 text-purple-400 text-sm font-bold animate-pulse px-4">
-                            <Loader2 size={18} className="animate-spin" /> Analisando Trajetória...
-                        </div>
-                     )}
-                </div>
-
-                {/* Scoreboard Summary */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-green-950/20 border border-green-900/50 p-4 rounded-2xl flex items-center gap-4">
-                        <div className="p-3 bg-green-900/40 rounded-full text-green-400"><TrendingUp size={20} /></div>
-                        <div>
-                            <div className="text-2xl font-black text-white">{wins}</div>
-                            <div className="text-xs text-green-400 uppercase font-bold tracking-wider">Indicadores em Melhora</div>
-                        </div>
-                    </div>
-                    <div className="bg-red-950/20 border border-red-900/50 p-4 rounded-2xl flex items-center gap-4">
-                        <div className="p-3 bg-red-900/40 rounded-full text-red-400"><AlertTriangle size={20} /></div>
-                        <div>
-                            <div className="text-2xl font-black text-white">{losses}</div>
-                            <div className="text-xs text-red-400 uppercase font-bold tracking-wider">Pontos de Atenção/Piora</div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* AI Analysis Section */}
-                {compAnalysis && (
-                     <div className="bg-gradient-to-br from-[#1e293b] to-slate-900 p-8 rounded-3xl border border-purple-500/20 shadow-[0_0_30px_rgba(168,85,247,0.1)] relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none"></div>
-                        <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2 relative z-10">
-                            <BrainCircuit className="text-purple-400" /> Diagnóstico de Tendência (IA)
-                        </h3>
-                        <div className="relative z-10 text-slate-300">
-                             <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownRenderers}>
-                                 {compAnalysis}
-                             </ReactMarkdown>
-                        </div>
-                     </div>
-                )}
-                
-                {/* Delta Cards - Comparing Last 2 */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <DeltaCard title="Segurança" curr={currDS.stats.avgSafety} prev={prevDS.stats.avgSafety} icon={Shield} />
-                    <DeltaCard title="Infraestrutura" curr={currDS.stats.avgFacilities} prev={prevDS.stats.avgFacilities} icon={School} />
-                    <DeltaCard title="Saúde Mental" curr={currDS.stats.avgMentalHealth} prev={prevDS.stats.avgMentalHealth} icon={Heart} />
-                    <DeltaCard title="Violência" curr={currDS.stats.violencePerc} prev={prevDS.stats.violencePerc} unit="%" inverse={true} icon={AlertTriangle} />
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                     {/* Line Chart: Evolution */}
-                     <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-800 shadow-lg">
-                        <h3 className="text-white font-bold mb-6 flex items-center gap-2"><TrendingUp size={20} className="text-cyan-400" /> Evolução dos Indicadores</h3>
-                        <div className="h-[350px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={trendData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} domain={[0, 5]} />
-                                    <RechartsTooltip content={<DarkTooltip />} />
-                                    <Legend wrapperStyle={{paddingTop: '20px'}} />
-                                    <Line type="monotone" dataKey="Safety" name="Segurança" stroke="#3b82f6" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} activeDot={{r: 7}} />
-                                    <Line type="monotone" dataKey="Facilities" name="Infraestrutura" stroke="#f97316" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} />
-                                    <Line type="monotone" dataKey="MentalHealth" name="Saúde Mental" stroke="#ec4899" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                     </div>
-
-                     {/* Area Chart: Violence & Sentiment */}
-                     <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-800 shadow-lg">
-                        <h3 className="text-white font-bold mb-6 flex items-center gap-2"><Activity size={20} className="text-red-400" /> Correlação Violência vs Sentimento</h3>
-                        <div className="h-[350px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={trendData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                                    <defs>
-                                        <linearGradient id="colorViolence" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
-                                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                                        </linearGradient>
-                                        <linearGradient id="colorPos" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
-                                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{fill: '#ef4444'}} domain={[0, 100]} label={{ value: 'Violência %', angle: -90, position: 'insideLeft', fill: '#ef4444', dy: 40 }} />
-                                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{fill: '#10b981'}} domain={[0, 100]} label={{ value: 'Sentimento Positivo %', angle: 90, position: 'insideRight', fill: '#10b981', dy: 50 }} />
-                                    <RechartsTooltip content={<DarkTooltip />} />
-                                    <Area yAxisId="left" type="monotone" dataKey="Violence" name="Violência (%)" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorViolence)" />
-                                    <Area yAxisId="right" type="monotone" dataKey="PositiveSent" name="Positividade (%)" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorPos)" />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </div>
-                     </div>
-                </div>
-                
-                {/* Heatmap Data Table */}
-                <div className="bg-[#1e293b] rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
-                    <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-                        <h3 className="text-white font-bold text-lg">Matriz de Dados (Heatmap)</h3>
-                        <div className="text-xs text-slate-500 font-mono">Best (Verde) / Worst (Vermelho)</div>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm text-slate-400">
-                             <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider">
-                                 <tr>
-                                     <th className="px-6 py-5">Indicador</th>
-                                     {sortedDatasets.map((ds, idx) => (
-                                         <th key={ds.id} className="px-6 py-5 text-center min-w-[120px]" style={{ color: colors[idx % colors.length] }}>
-                                             {ds.name}
-                                         </th>
-                                     ))}
-                                 </tr>
-                             </thead>
-                             <tbody className="divide-y divide-slate-800 bg-slate-900/50">
-                                 {[
-                                     { label: 'Segurança (0-5)', key: 'avgSafety', inverse: false },
-                                     { label: 'Infraestrutura (0-5)', key: 'avgFacilities', inverse: false },
-                                     { label: 'Saúde Mental (0-5)', key: 'avgMentalHealth', inverse: false },
-                                     { label: 'Violência (%)', key: 'violencePerc', inverse: true },
-                                 ].map(row => (
-                                    <tr key={row.key} className="hover:bg-slate-800/50 transition-colors">
-                                        <td className="px-6 py-5 font-bold text-white flex items-center gap-2">
-                                            {row.label}
-                                        </td>
-                                        {sortedDatasets.map(ds => (
-                                            <td key={ds.id} className="px-6 py-5 text-center">
-                                                <HeatmapCell 
-                                                    val={ds.stats[row.key as keyof Stats]} 
-                                                    allVals={sortedDatasets.map(d => parseFloat(d.stats[row.key as keyof Stats] as string))} 
-                                                    inverse={row.inverse} 
-                                                />
-                                            </td>
-                                        ))}
-                                    </tr>
-                                 ))}
-                                 {/* Sentiment Row Special Case */}
-                                 <tr className="hover:bg-slate-800/50 transition-colors">
-                                     <td className="px-6 py-5 font-bold text-white">Sentimento Positivo (%)</td>
-                                     {sortedDatasets.map(ds => (
-                                        <td key={ds.id} className="px-6 py-5 text-center">
-                                            <HeatmapCell 
-                                                val={ds.sentimentStats.positive} 
-                                                allVals={sortedDatasets.map(d => d.sentimentStats.positive)} 
-                                                inverse={false}
-                                            />
-                                        </td>
-                                     ))}
-                                 </tr>
-                             </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {/* Radar Overlay */}
+                {/* Header Section with Timeline Controls */}
                 <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl">
-                    <h3 className="text-white font-bold mb-4">Sobreposição de Clima (Radar)</h3>
-                    <div className="h-[500px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarComparisonData}>
-                                <PolarGrid stroke="#334155" />
-                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 13, fontWeight: 'bold' }} />
-                                <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
-                                <RechartsTooltip content={<DarkTooltip />} />
-                                <Legend />
-                                {sortedDatasets.map((ds, idx) => (
-                                    <Radar 
-                                        key={ds.id} 
-                                        name={ds.name} 
-                                        dataKey={ds.name} 
-                                        stroke={colors[idx % colors.length]} 
-                                        strokeWidth={3} 
-                                        fill={colors[idx % colors.length]} 
-                                        fillOpacity={0.05} 
-                                    />
-                                ))}
-                            </RadarChart>
-                        </ResponsiveContainer>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                         <div>
+                            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                                 <GitCompare size={28} className="text-cyan-400" /> Comparativo Evolutivo
+                            </h2>
+                            <p className="text-slate-400 text-sm mt-1">
+                                Analise a trajetória entre períodos específicos.
+                            </p>
+                         </div>
+                         
+                         {!loadingCompAI ? (
+                            <button 
+                                onClick={() => handleGenerateComparativeAnalysis(activeComparisonDatasets)}
+                                disabled={!hasEnoughData}
+                                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-all ${
+                                    hasEnoughData 
+                                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-900/50 active:scale-95'
+                                    : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                }`}
+                            >
+                                <Sparkles size={16} /> Gerar Inteligência Comparativa
+                            </button>
+                         ) : (
+                            <div className="flex items-center gap-2 text-purple-400 text-sm font-bold animate-pulse px-4">
+                                <Loader2 size={18} className="animate-spin" /> Analisando Trajetória...
+                            </div>
+                         )}
                     </div>
+
+                    {/* Timeline Slider Control */}
+                    {compRange && (
+                        <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700/50">
+                            <div className="flex flex-col md:flex-row items-center gap-6">
+                                <div className="flex items-center gap-3 w-full md:w-auto">
+                                    <div className="bg-slate-800 p-2 rounded-lg text-slate-400"><Clock size={16} /></div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Início</span>
+                                        <select 
+                                            value={compRange.start}
+                                            onChange={(e) => {
+                                                const newStart = parseInt(e.target.value);
+                                                if (newStart <= compRange.end) setCompRange({...compRange, start: newStart});
+                                            }}
+                                            className="bg-transparent text-white font-bold text-sm focus:outline-none cursor-pointer hover:text-cyan-400"
+                                        >
+                                            {sortedDatasets.map((ds, idx) => (
+                                                <option key={ds.id} value={idx} disabled={idx > compRange.end}>{ds.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="hidden md:flex flex-1 items-center px-4 relative h-8">
+                                    <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-700 -translate-y-1/2 rounded-full"></div>
+                                    <div 
+                                        className="absolute h-1 bg-cyan-500/50 top-1/2 -translate-y-1/2 transition-all duration-300"
+                                        style={{ 
+                                            left: `${(compRange.start / (sortedDatasets.length - 1)) * 100}%`,
+                                            right: `${100 - ((compRange.end / (sortedDatasets.length - 1)) * 100)}%`
+                                        }}
+                                    ></div>
+                                    {sortedDatasets.map((ds, idx) => {
+                                        const isSelected = idx >= compRange.start && idx <= compRange.end;
+                                        const isEndpoint = idx === compRange.start || idx === compRange.end;
+                                        return (
+                                            <div 
+                                                key={ds.id}
+                                                onClick={() => {
+                                                    // Simple logic: if closer to start, set start. Else set end.
+                                                    const distToStart = Math.abs(idx - compRange.start);
+                                                    const distToEnd = Math.abs(idx - compRange.end);
+                                                    if (distToStart < distToEnd || (idx < compRange.start)) {
+                                                        setCompRange({ ...compRange, start: idx });
+                                                    } else {
+                                                        setCompRange({ ...compRange, end: idx });
+                                                    }
+                                                }}
+                                                className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full cursor-pointer transition-all duration-300 z-10 ${
+                                                    isEndpoint ? 'bg-cyan-400 scale-125 shadow-[0_0_10px_#22d3ee]' : 
+                                                    isSelected ? 'bg-cyan-600' : 'bg-slate-700 hover:bg-slate-600'
+                                                }`}
+                                                style={{ left: `${(idx / (sortedDatasets.length - 1)) * 100}%` }}
+                                                title={ds.name}
+                                            ></div>
+                                        )
+                                    })}
+                                </div>
+
+                                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Fim</span>
+                                        <select 
+                                            value={compRange.end}
+                                            onChange={(e) => {
+                                                const newEnd = parseInt(e.target.value);
+                                                if (newEnd >= compRange.start) setCompRange({...compRange, end: newEnd});
+                                            }}
+                                            className="bg-transparent text-white font-bold text-sm focus:outline-none cursor-pointer hover:text-cyan-400 text-right"
+                                        >
+                                            {sortedDatasets.map((ds, idx) => (
+                                                <option key={ds.id} value={idx} disabled={idx < compRange.start}>{ds.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="bg-slate-800 p-2 rounded-lg text-slate-400"><Calendar size={16} /></div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
+
+                {!hasEnoughData ? (
+                     <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 border-dashed text-center">
+                        <AlertCircle className="mx-auto text-slate-500 mb-2" size={32} />
+                        <h3 className="text-white font-bold">Seleção Insuficiente</h3>
+                        <p className="text-slate-400 text-sm">Selecione pelo menos 2 períodos na linha do tempo acima para visualizar a comparação.</p>
+                     </div>
+                ) : (
+                    <>
+                        {/* Scoreboard Summary */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="bg-green-950/20 border border-green-900/50 p-4 rounded-2xl flex items-center gap-4">
+                                <div className="p-3 bg-green-900/40 rounded-full text-green-400"><TrendingUp size={20} /></div>
+                                <div>
+                                    <div className="text-2xl font-black text-white">{wins}</div>
+                                    <div className="text-xs text-green-400 uppercase font-bold tracking-wider">Indicadores em Melhora</div>
+                                </div>
+                            </div>
+                            <div className="bg-red-950/20 border border-red-900/50 p-4 rounded-2xl flex items-center gap-4">
+                                <div className="p-3 bg-red-900/40 rounded-full text-red-400"><AlertTriangle size={20} /></div>
+                                <div>
+                                    <div className="text-2xl font-black text-white">{losses}</div>
+                                    <div className="text-xs text-red-400 uppercase font-bold tracking-wider">Pontos de Atenção/Piora</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* AI Analysis Section */}
+                        {compAnalysis && (
+                             <div className="bg-gradient-to-br from-[#1e293b] to-slate-900 p-8 rounded-3xl border border-purple-500/20 shadow-[0_0_30px_rgba(168,85,247,0.1)] relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none"></div>
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2 relative z-10">
+                                    <BrainCircuit className="text-purple-400" /> Diagnóstico de Tendência (IA)
+                                </h3>
+                                <div className="relative z-10 text-slate-300">
+                                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownRenderers}>
+                                         {compAnalysis}
+                                     </ReactMarkdown>
+                                </div>
+                             </div>
+                        )}
+                        
+                        {/* Delta Cards - Comparing Last 2 in Range */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <DeltaCard title="Segurança" curr={currDS.stats.avgSafety} prev={prevDS.stats.avgSafety} icon={Shield} />
+                            <DeltaCard title="Infraestrutura" curr={currDS.stats.avgFacilities} prev={prevDS.stats.avgFacilities} icon={School} />
+                            <DeltaCard title="Saúde Mental" curr={currDS.stats.avgMentalHealth} prev={prevDS.stats.avgMentalHealth} icon={Heart} />
+                            <DeltaCard title="Violência" curr={currDS.stats.violencePerc} prev={prevDS.stats.violencePerc} unit="%" inverse={true} icon={AlertTriangle} />
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                             {/* Line Chart: Evolution */}
+                             <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-800 shadow-lg">
+                                <h3 className="text-white font-bold mb-6 flex items-center gap-2"><TrendingUp size={20} className="text-cyan-400" /> Evolução dos Indicadores</h3>
+                                <div className="h-[350px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={trendData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} domain={[0, 5]} />
+                                            <RechartsTooltip content={<DarkTooltip />} />
+                                            <Legend wrapperStyle={{paddingTop: '20px'}} />
+                                            <Line type="monotone" dataKey="Safety" name="Segurança" stroke="#3b82f6" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} activeDot={{r: 7}} />
+                                            <Line type="monotone" dataKey="Facilities" name="Infraestrutura" stroke="#f97316" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} />
+                                            <Line type="monotone" dataKey="MentalHealth" name="Saúde Mental" stroke="#ec4899" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                             </div>
+
+                             {/* Area Chart: Violence & Sentiment */}
+                             <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-800 shadow-lg">
+                                <h3 className="text-white font-bold mb-6 flex items-center gap-2"><Activity size={20} className="text-red-400" /> Correlação Violência vs Sentimento</h3>
+                                <div className="h-[350px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={trendData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                                            <defs>
+                                                <linearGradient id="colorViolence" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
+                                                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                                                </linearGradient>
+                                                <linearGradient id="colorPos" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
+                                            <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{fill: '#ef4444'}} domain={[0, 100]} label={{ value: 'Violência %', angle: -90, position: 'insideLeft', fill: '#ef4444', dy: 40 }} />
+                                            <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{fill: '#10b981'}} domain={[0, 100]} label={{ value: 'Sentimento Positivo %', angle: 90, position: 'insideRight', fill: '#10b981', dy: 50 }} />
+                                            <RechartsTooltip content={<DarkTooltip />} />
+                                            <Area yAxisId="left" type="monotone" dataKey="Violence" name="Violência (%)" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorViolence)" />
+                                            <Area yAxisId="right" type="monotone" dataKey="PositiveSent" name="Positividade (%)" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorPos)" />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                             </div>
+                        </div>
+                        
+                        {/* Heatmap Data Table */}
+                        <div className="bg-[#1e293b] rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
+                            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+                                <h3 className="text-white font-bold text-lg">Matriz de Dados (Heatmap)</h3>
+                                <div className="text-xs text-slate-500 font-mono">Best (Verde) / Worst (Vermelho)</div>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm text-slate-400">
+                                     <thead className="bg-slate-950 text-slate-200 uppercase text-xs font-bold tracking-wider">
+                                         <tr>
+                                             <th className="px-6 py-5">Indicador</th>
+                                             {activeComparisonDatasets.map((ds, idx) => (
+                                                 <th key={ds.id} className="px-6 py-5 text-center min-w-[120px]" style={{ color: colors[idx % colors.length] }}>
+                                                     {ds.name}
+                                                 </th>
+                                             ))}
+                                         </tr>
+                                     </thead>
+                                     <tbody className="divide-y divide-slate-800 bg-slate-900/50">
+                                         {[
+                                             { label: 'Segurança (0-5)', key: 'avgSafety', inverse: false },
+                                             { label: 'Infraestrutura (0-5)', key: 'avgFacilities', inverse: false },
+                                             { label: 'Saúde Mental (0-5)', key: 'avgMentalHealth', inverse: false },
+                                             { label: 'Violência (%)', key: 'violencePerc', inverse: true },
+                                         ].map(row => (
+                                            <tr key={row.key} className="hover:bg-slate-800/50 transition-colors">
+                                                <td className="px-6 py-5 font-bold text-white flex items-center gap-2">
+                                                    {row.label}
+                                                </td>
+                                                {activeComparisonDatasets.map(ds => (
+                                                    <td key={ds.id} className="px-6 py-5 text-center">
+                                                        <HeatmapCell 
+                                                            val={ds.stats[row.key as keyof Stats]} 
+                                                            allVals={activeComparisonDatasets.map(d => parseFloat(d.stats[row.key as keyof Stats] as string))} 
+                                                            inverse={row.inverse} 
+                                                            periodName={ds.name}
+                                                            metricLabel={row.label.split(' (')[0]}
+                                                        />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                         ))}
+                                         <tr className="hover:bg-slate-800/50 transition-colors">
+                                             <td className="px-6 py-5 font-bold text-white">Sentimento Positivo (%)</td>
+                                             {activeComparisonDatasets.map(ds => (
+                                                <td key={ds.id} className="px-6 py-5 text-center">
+                                                    <HeatmapCell 
+                                                        val={ds.sentimentStats.positive} 
+                                                        allVals={activeComparisonDatasets.map(d => d.sentimentStats.positive)} 
+                                                        inverse={false}
+                                                        periodName={ds.name}
+                                                        metricLabel="Sentimento Positivo"
+                                                    />
+                                                </td>
+                                             ))}
+                                         </tr>
+                                     </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Radar Overlay */}
+                        <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-xl">
+                            <h3 className="text-white font-bold mb-4">Sobreposição de Clima (Radar)</h3>
+                            <div className="h-[500px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarComparisonData}>
+                                        <PolarGrid stroke="#334155" />
+                                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 13, fontWeight: 'bold' }} />
+                                        <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                                        <RechartsTooltip content={<DarkTooltip />} />
+                                        <Legend />
+                                        {activeComparisonDatasets.map((ds, idx) => (
+                                            <Radar 
+                                                key={ds.id} 
+                                                name={ds.name} 
+                                                dataKey={ds.name} 
+                                                stroke={colors[idx % colors.length]} 
+                                                strokeWidth={3} 
+                                                fill={colors[idx % colors.length]} 
+                                                fillOpacity={0.05} 
+                                            />
+                                        ))}
+                                    </RadarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
         );
     };

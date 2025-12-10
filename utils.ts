@@ -1,17 +1,117 @@
 import { SurveyData, AdvancedStat } from './types';
 
 export const analyzeSentiment = (text: string): 'Positivo' | 'Neutro' | 'Negativo' => {
-  if (!text) return 'Neutro';
-  const lower = text.toLowerCase();
-  const negatives = ['falta', 'urgente', 'medo', 'violência', 'insegurança', 'problema', 'ruim', 'péssim', 'difícil', 'ausência', 'precária', 'risco', 'droga', 'briga'];
-  const positives = ['bom', 'ótimo', 'excelente', 'parabéns', 'gosto', 'seguro', 'feliz', 'melhorou', 'agradável', 'apoio', 'gosto muito'];
+  if (!text || typeof text !== 'string') return 'Neutro';
+  const lower = text.toLowerCase().trim();
+  
+  // Dicionário ponderado para análise de sentimento contextual (Escala -3 a +3)
+  const sentimentMap: Record<string, number> = {
+    // Positivos
+    'bom': 1, 'boa': 1, 'bons': 1, 'boas': 1,
+    'ótimo': 2, 'ótima': 2, 'ótimos': 2, 'ótimas': 2,
+    'excelente': 3, 'excelentes': 3,
+    'maravilhoso': 3, 'maravilhosa': 3,
+    'parabéns': 2,
+    'gosto': 1, 'amo': 3, 'adora': 2,
+    'seguro': 2, 'segura': 2, 'segurança': 1,
+    'feliz': 2, 'felicidade': 2,
+    'melhorou': 2, 'melhor': 1,
+    'agradável': 1,
+    'apoio': 2, 'ajuda': 1, 'acolhimento': 2, 'acolhedor': 2,
+    'respeito': 2, 'respeitoso': 2,
+    'limpo': 1, 'limpeza': 1, 'organizado': 1,
+    'eficiente': 2,
+    'amigável': 1, 'amigo': 1,
+    'funciona': 1,
+    'legal': 1,
+    'satisfeito': 2, 'satisfeita': 2,
+    'confio': 2, 'confiança': 2,
+    'top': 1, '10': 1,
+
+    // Negativos
+    'ruim': -1, 'ruins': -1,
+    'péssimo': -3, 'péssima': -3,
+    'horrível': -3, 'horriveis': -3,
+    'difícil': -1, 'dificuldade': -1,
+    'triste': -2, 'tristeza': -2,
+    'falta': -2, 'faltam': -2,
+    'ausência': -1, 'ausente': -1,
+    'precária': -2, 'precário': -2,
+    'medo': -3,
+    'violência': -3, 'violento': -3, 'violenta': -3,
+    'inseguro': -3, 'insegura': -3, 'insegurança': -3,
+    'risco': -2, 'arriscado': -2,
+    'droga': -3, 'drogas': -3,
+    'briga': -2, 'brigas': -2,
+    'ameaça': -3, 'ameaçado': -3,
+    'bullying': -3,
+    'desrespeito': -3, 'desrespeitoso': -3,
+    'sujo': -2, 'sujeira': -2,
+    'quebrado': -2, 'quebrada': -2,
+    'bagunça': -1, 'bagunçado': -1,
+    'barulho': -1, 'barulhento': -1,
+    'ignorante': -2, 'estúpido': -2,
+    'lento': -1, 'demorado': -1,
+    'vergonha': -2,
+    'pior': -2, 'piorou': -2,
+    'odeio': -3, 'detesto': -3,
+    'insuportável': -3,
+    'negligência': -3, 'negligente': -3,
+    'abandonado': -3, 'abandono': -3,
+    'ignorado': -2,
+    'fome': -2,
+    'bater': -2, 'apanhar': -2,
+    'roubo': -3, 'furto': -3
+  };
+
+  const negations = new Set(['não', 'nao', 'nem', 'nunca', 'jamais', 'sem', 'pouco', 'menos']);
+  const boosters = new Set(['muito', 'muita', 'bastante', 'extremamente', 'demais', 'super', 'realmente', 'totalmente', 'tão']);
+  
+  // Tokeniza preservando a intenção, separando por pontuação e espaço
+  const tokens = lower.split(/[\s,.;!?()"]+/);
   
   let score = 0;
-  negatives.forEach(w => { if (lower.includes(w)) score--; });
-  positives.forEach(w => { if (lower.includes(w)) score++; });
-  
-  if (score > 0) return 'Positivo';
-  if (score < 0) return 'Negativo';
+
+  for (let i = 0; i < tokens.length; i++) {
+    const word = tokens[i];
+    if (!word) continue;
+
+    let wordScore = sentimentMap[word] || 0;
+
+    // Análise de Contexto (Lookbehind)
+    if (wordScore !== 0) {
+      let multiplier = 1;
+      
+      // Checa a palavra imediatamente anterior
+      if (i > 0) {
+        const prev = tokens[i - 1];
+        if (negations.has(prev)) multiplier *= -1; // Inverte polaridade ("não gosto")
+        else if (boosters.has(prev)) multiplier *= 1.5; // Intensifica ("muito bom")
+        
+        // Checa duas palavras atrás para casos como "não é bom"
+        if (i > 1) {
+             const prev2 = tokens[i - 2];
+             // Se a anterior for verbo de ligação, checa a negação antes dele
+             const isLinkingVerb = ['é', 'e', 'foi', 'está', 'esta', 'tá', 'ta', 'são'].includes(prev);
+             if (isLinkingVerb && negations.has(prev2)) {
+                 multiplier *= -1;
+             }
+        }
+      }
+
+      score += wordScore * multiplier;
+    }
+  }
+
+  // Heurísticas de Frase (Expressões Idiomáticas)
+  if (lower.includes('deixa a desejar') || lower.includes('deixar a desejar')) score -= 2;
+  if (lower.includes('precisa melhorar')) score -= 1;
+  if (lower.includes('nada a reclamar') || lower.includes('nada a declarar')) score += 1;
+  if (lower.includes('valeu a pena')) score += 2;
+
+  // Limiares de Decisão
+  if (score > 0.5) return 'Positivo';
+  if (score < -0.5) return 'Negativo';
   return 'Neutro';
 };
 
