@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -284,15 +285,13 @@ const App: React.FC = () => {
         }
     };
 
-    const handleGenerateComparativeAnalysis = async (sortedDatasets: Dataset[]) => {
+    const handleGenerateComparativeAnalysis = async (filteredDatasets: Dataset[]) => {
         setLoadingCompAI(true);
         try {
-            const report = await generateComparativeReport(sortedDatasets);
+            const report = await generateComparativeReport(filteredDatasets);
             setCompAnalysis(report);
         } catch (err) {
             console.error(err);
-            // You might want to add a state for comparative error as well, 
-            // but for now, logging it is better than nothing.
             alert("Erro ao gerar comparativo: " + (err instanceof Error ? err.message : "Erro desconhecido"));
         } finally {
             setLoadingCompAI(false);
@@ -695,7 +694,13 @@ const App: React.FC = () => {
                              <div className="bg-gradient-to-br from-[#1e293b] to-slate-900 p-8 rounded-3xl border border-purple-500/20 shadow-[0_0_30px_rgba(168,85,247,0.1)] relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none"></div>
                                 <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2 relative z-10">
-                                    <BrainCircuit className="text-purple-400" /> Diagnóstico de Tendência (IA)
+                                    <BrainCircuit className="text-purple-400" /> 
+                                    <span>
+                                        Diagnóstico de Tendência 
+                                        <span className="text-slate-500 text-base font-medium ml-2">
+                                            ({activeComparisonDatasets[0].name} → {activeComparisonDatasets[activeComparisonDatasets.length - 1].name})
+                                        </span>
+                                    </span>
                                 </h3>
                                 <div className="relative z-10 text-slate-300">
                                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownRenderers}>

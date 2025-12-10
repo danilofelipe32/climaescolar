@@ -83,51 +83,58 @@ export const generateComparativeReport = async (datasets: Dataset[]): Promise<st
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     // 1. Sort datasets chronologically (assuming name contains date or increasing sequence)
+    // Note: The UI usually passes already sorted datasets, but we ensure sorting here just in case.
     const sortedDatasets = [...datasets].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    const periodStart = sortedDatasets[0].name;
+    const periodEnd = sortedDatasets[sortedDatasets.length - 1].name;
 
-    // 2. Prepare structured summary
+    // 2. Prepare structured summary specifically for trend analysis
     const summaryData = sortedDatasets.map(d => ({
         period: d.name,
         metrics: {
-            safety: d.stats.avgSafety,
-            mental_health: d.stats.avgMentalHealth,
-            infrastructure: d.stats.avgFacilities,
-            violence_rate: d.stats.violencePerc
+            safety: parseFloat(d.stats.avgSafety),
+            mental_health: parseFloat(d.stats.avgMentalHealth),
+            infrastructure: parseFloat(d.stats.avgFacilities),
+            violence_rate: parseFloat(d.stats.violencePerc),
+            support: parseFloat(d.stats.avgSupport)
         },
-        sentiment: {
-            positive_percent: d.sentimentStats.positive,
-            negative_percent: d.sentimentStats.negative
+        sentiment_balance: {
+            positive: d.sentimentStats.positive,
+            negative: d.sentimentStats.negative
         }
     }));
 
     const prompt = `
-    Atue como um Cientista de Dados Educacionais especializado em Análise Longitudinal.
-    Estou fornecendo uma série temporal de dados de clima escolar para análise comparativa.
+    Atue como um Especialista em Análise de Dados Longitudinais (Time-Series) para Educação.
+    Analise o seguinte conjunto de dados sequencial do período: **${periodStart}** até **${periodEnd}**.
 
-    DADOS (Ordem Cronológica):
+    DADOS HISTÓRICOS:
     ${JSON.stringify(summaryData, null, 2)}
 
     OBJETIVO:
-    Identificar padrões de **Evolução**, **Regressão** e **Correlação** entre os períodos.
+    Gerar um relatório de inteligência focado na **TRAJETÓRIA** e **CORRELAÇÕES** das métricas ao longo deste intervalo selecionado.
 
     ESTRUTURA DA RESPOSTA (MARKDOWN):
 
-    1. **Resumo da Trajetória**:
-       - Descreva a narrativa dos dados. Houve progresso sustentável ou flutuações?
-       - Destaque o "ponto de virada" (se houver). Ex: "A segurança melhorou consistentemente, mas a saúde mental colapsou no último período".
+    1. **Análise de Tendência Macro (Overview)**:
+       - Qual é a "história" que esses dados contam? (Ex: "Houve uma recuperação robusta na segurança, porém a saúde mental entrou em declínio acentuado").
+       - Identifique o tipo de curva: Crescimento Linear, Estagnação, Volatilidade ou Queda?
 
-    2. **Tabela de Variação de Impacto (Markdown)**:
-       - Crie uma tabela comparando o Primeiro vs Último período.
-       - Colunas: | Indicador | Início | Fim | Delta | Interpretação (Melhorou/Piorou/Estável) |
+    2. **Correlações Estratégicas (Causa e Efeito)**:
+       - Analise pares específicos:
+         * **Segurança vs. Violência**: A percepção de segurança aumentou enquanto a violência real diminuiu? Ou há uma desconexão (segurança sobe, mas violência persiste)?
+         * **Infraestrutura vs. Sentimento**: A melhoria/piora física da escola impactou o humor (sentimento positivo/negativo) da comunidade?
 
-    3. **Análise de Correlação e Causalidade**:
-       - Relacione métricas. Ex: "A queda na infraestrutura está correlacionada com o aumento da negatividade nos comentários?"
-       - Analise se a taxa de violência acompanha a percepção de segurança ou se há contradição.
+    3. **Destaques do Período (Winners & Losers)**:
+       - Qual indicador teve a melhor evolução percentual?
+       - Qual indicador é o "gargalo" persistente que não reagiu às intervenções (manteve-se baixo em todos os períodos)?
 
-    4. **Recomendações de Longo Prazo**:
-       - Baseado na linha de tendência (trendline), o que deve ser priorizado para o próximo ciclo?
+    4. **Projeção e Recomendação**:
+       - Baseado na inclinação da reta (trendline) atual, se nada for feito, o que acontecerá no próximo ciclo?
+       - Sugira 1 ação corretiva focada na tendência mais preocupante identificada.
 
-    Seja direto, técnico e use insights baseados nos números.
+    TOM DE VOZ:
+    Executivo, direto e baseado em evidências numéricas. Use setas (↑ ↓ →) para ilustrar movimentos.
     `;
 
     try {
