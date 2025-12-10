@@ -8,6 +8,11 @@ export const generateSchoolReport = async (
     sentimentStats: SentimentStats
 ): Promise<string> => {
     
+    // Validação Explícita para Debug
+    if (!process.env.API_KEY) {
+        throw new Error("A variável de ambiente 'API_KEY' não foi encontrada. Verifique as configurações do Vercel.");
+    }
+
     // API Key must be obtained exclusively from process.env.API_KEY
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -61,15 +66,20 @@ export const generateSchoolReport = async (
         });
 
         const text = response.text;
-        if (!text) throw new Error("No content generated.");
+        if (!text) throw new Error("A IA não retornou conteúdo (Resposta vazia).");
         return text;
-    } catch (error) {
+    } catch (error: any) {
         console.error("Gemini API Error:", error);
-        throw error;
+        // Repassa a mensagem original do erro para o frontend
+        throw new Error(error.message || "Erro desconhecido na comunicação com a IA.");
     }
 };
 
 export const generateComparativeReport = async (datasets: Dataset[]): Promise<string> => {
+    if (!process.env.API_KEY) {
+        throw new Error("A variável de ambiente 'API_KEY' não foi encontrada.");
+    }
+
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     // 1. Sort datasets chronologically (assuming name contains date or increasing sequence)
@@ -127,8 +137,8 @@ export const generateComparativeReport = async (datasets: Dataset[]): Promise<st
         });
 
         return response.text || "Não foi possível gerar a análise comparativa.";
-    } catch (error) {
+    } catch (error: any) {
         console.error("Comparative AI Error:", error);
-        throw error;
+        throw new Error(error.message || "Erro ao gerar comparativo.");
     }
 };

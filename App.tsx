@@ -275,7 +275,10 @@ const App: React.FC = () => {
             const report = await generateSchoolReport(currentStats, currentSuggestions, currentSentiments);
             setAnalysis(report);
         } catch (err: any) {
-            setErrorAI("Erro ao gerar análise. Verifique a configuração da API Key no Vercel (process.env.API_KEY).");
+            console.error("Erro na UI (GenerateAnalysis):", err);
+            // Show the specific error message to the user
+            const msg = err instanceof Error ? err.message : "Erro desconhecido.";
+            setErrorAI(`Falha na IA: ${msg}`);
         } finally {
             setLoadingAI(false);
         }
@@ -288,6 +291,9 @@ const App: React.FC = () => {
             setCompAnalysis(report);
         } catch (err) {
             console.error(err);
+            // You might want to add a state for comparative error as well, 
+            // but for now, logging it is better than nothing.
+            alert("Erro ao gerar comparativo: " + (err instanceof Error ? err.message : "Erro desconhecido"));
         } finally {
             setLoadingCompAI(false);
         }
