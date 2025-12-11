@@ -2,8 +2,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { Stats, SentimentStats, Suggestion, Dataset } from '../types';
 
-// Define a API Key usando a variável de ambiente ou o valor hardcoded de teste fornecido
-const API_KEY = process.env.API_KEY || "AIzaSyC66emimXFo6BVctXpbYlheIueYSgP3ExE";
+// A chave de API deve vir exclusivamente da variável de ambiente configurada na plataforma (ex: Vercel)
+const API_KEY = process.env.API_KEY;
 
 export const generateSchoolReport = async (
     stats: Stats, 
@@ -13,7 +13,7 @@ export const generateSchoolReport = async (
     
     // Validação
     if (!API_KEY) {
-        throw new Error("A chave de API não foi encontrada. Verifique as configurações do Vercel ou o código.");
+        throw new Error("A chave de API não foi identificada. Certifique-se de configurar a variável de ambiente 'API_KEY' nas configurações do projeto (Vercel/env).");
     }
 
     const ai = new GoogleGenAI({ apiKey: API_KEY });
@@ -79,7 +79,7 @@ export const generateSchoolReport = async (
 
 export const generateComparativeReport = async (datasets: Dataset[]): Promise<string> => {
     if (!API_KEY) {
-        throw new Error("A chave de API não foi encontrada.");
+        throw new Error("A chave de API não foi configurada. Verifique a variável de ambiente API_KEY.");
     }
 
     const ai = new GoogleGenAI({ apiKey: API_KEY });
