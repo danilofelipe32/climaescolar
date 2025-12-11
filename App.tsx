@@ -1091,13 +1091,31 @@ const App: React.FC = () => {
             const status = getThresholdStatus(stat.metric, stat.mean);
             const isCritical = status?.isViolation;
             
+            const definitions: Record<string, string> = {
+                "Segurança": "Média das avaliações sobre a sensação de segurança geral no ambiente escolar (Escala 1-5).",
+                "Infraestrutura": "Média das avaliações sobre a qualidade das instalações físicas, limpeza e manutenção (Escala 1-5).",
+                "Saúde Mental": "Média das autoavaliações sobre bem-estar emocional e psicológico dentro da escola (Escala 1-5).",
+                "Respeito": "Média das percepções sobre o respeito mútuo entre alunos e funcionários (Escala 1-5).",
+            };
+            
             return (
                 <div className={`p-6 rounded-2xl border transition-all duration-300 ${isCritical ? 'bg-red-950/20 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-slate-900/50 border-slate-700 hover:border-purple-500/30'}`}>
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
                         <div className="flex items-center gap-3">
                             <div className={`w-2 h-8 rounded-full ${isCritical ? 'bg-red-500' : 'bg-purple-500'}`}></div>
                             <div>
-                                <h3 className="text-xl font-bold text-white">{stat.metric}</h3>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-xl font-bold text-white">{stat.metric}</h3>
+                                    <div className="relative group">
+                                        <Info size={16} className="text-slate-500 cursor-help hover:text-cyan-400 transition-colors" />
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-950 border border-slate-700 p-3 rounded-xl shadow-2xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                            <p className="text-xs text-slate-300 leading-relaxed text-center">
+                                                {definitions[stat.metric] || "Métrica calculada via média aritmética das respostas."}
+                                            </p>
+                                            <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-slate-950 border-r border-b border-slate-700 transform rotate-45"></div>
+                                        </div>
+                                    </div>
+                                </div>
                                 {status && (
                                     <div className="flex items-center gap-1.5 mt-1">
                                         {isCritical ? <AlertCircle size={12} className="text-red-400" /> : <CheckCircle size={12} className="text-green-400" />}
@@ -1138,7 +1156,18 @@ const App: React.FC = () => {
                         <div className="flex items-center gap-3">
                             <div className={`w-2 h-8 rounded-full ${isCritical ? 'bg-red-500' : 'bg-purple-500'}`}></div>
                             <div>
-                                <h3 className="text-xl font-bold text-white">Taxa de Violência</h3>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-xl font-bold text-white">Taxa de Violência</h3>
+                                    <div className="relative group">
+                                        <Info size={16} className="text-slate-500 cursor-help hover:text-cyan-400 transition-colors" />
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-950 border border-slate-700 p-3 rounded-xl shadow-2xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                            <p className="text-xs text-slate-300 leading-relaxed text-center">
+                                                Percentual acumulado de relatos afirmativos sobre presenciar ou sofrer violência no ambiente escolar.
+                                            </p>
+                                            <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-slate-950 border-r border-b border-slate-700 transform rotate-45"></div>
+                                        </div>
+                                    </div>
+                                </div>
                                 {status && (
                                     <div className="flex items-center gap-1.5 mt-1">
                                         {isCritical ? <AlertCircle size={12} className="text-red-400" /> : <CheckCircle size={12} className="text-green-400" />}
